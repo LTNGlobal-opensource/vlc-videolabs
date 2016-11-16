@@ -117,6 +117,17 @@ void HxxxParseSEI(const uint8_t *p_buf, size_t i_buf,
                                     b_continue = pf_callback( &sei_data, cbdata );
                                 }
                                 break;
+                            case VLC_FOURCC('D', 'T', 'G', '1'):
+                                if( i_t35 == 9 )
+                                {
+                                    sei_data.itu_t35.type = HXXX_ITU_T35_TYPE_AFD;
+                                    if( ( p_t35[7] & (1 << 6) ) )
+                                        sei_data.itu_t35.u.afd = p_t35[8] & 0x0F;
+                                    else
+                                        sei_data.itu_t35.u.afd = -1;
+                                    b_continue = pf_callback( &sei_data, cbdata );
+                                }
+                                break;
                             default:
                                 break;
                         }

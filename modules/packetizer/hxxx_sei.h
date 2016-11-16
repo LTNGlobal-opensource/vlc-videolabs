@@ -34,6 +34,7 @@ enum hxxx_sei_type_e
 enum hxxx_sei_t35_type_e
 {
     HXXX_ITU_T35_TYPE_CC,
+    HXXX_ITU_T35_TYPE_AFD,
 };
 
 typedef struct
@@ -52,6 +53,7 @@ typedef struct
                     const uint8_t *p_data;
                     size_t i_data;
                 } cc;
+                int8_t afd;
             } u;
         } itu_t35;
         struct
