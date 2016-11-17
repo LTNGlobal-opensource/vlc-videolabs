@@ -30,6 +30,7 @@
 #include <vlc_es.h>
 #include <vlc_picture.h>
 #include <vlc_subpicture.h>
+#include <vlc_ancillary.h>
 
 /**
  * \defgroup codec Codec
@@ -133,6 +134,8 @@ struct decoder_t
      * globaly, not necessary for the current packet. Video decoders should use
      * the decoder_QueueCc() function to pass closed captions. */
     block_t *           ( * pf_get_cc )      ( decoder_t *, decoder_cc_desc_t * );
+    vlc_ancillary_t *   ( * pf_get_anc )    ( decoder_t *, int *p_type );
+    void                ( * pf_set_anc )    ( decoder_t *, vlc_ancillary_t * );
 
     /* Meta data at codec level
      *  The decoder owner set it back to NULL once it has retreived what it needs.
