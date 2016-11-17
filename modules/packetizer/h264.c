@@ -1154,6 +1154,9 @@ static bool ParseSeiCallback( const hxxx_sei_data_t *p_sei_data, void *cbdata )
             {
                 cc_storage_append( p_sys->p_ccs, true, p_sei_data->itu_t35.u.cc.p_data,
                                                        p_sei_data->itu_t35.u.cc.i_data );
+                vlc_ancillary_t *p_anc = cc_storage_copy_last_vanc( p_sys->p_ccs );
+                if( p_anc )
+                    vlc_ancillary_StorageAppend( &p_sys->p_vanc, p_anc );
             }
         } break;
 
