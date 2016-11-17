@@ -21,6 +21,7 @@
 #define HXXX_COMMON_H
 
 #include <vlc_common.h>
+#include <vlc_ancillary.h>
 
 /* */
 typedef struct cc_storage_t cc_storage_t;
@@ -34,6 +35,7 @@ void cc_storage_append( cc_storage_t *p_ccs, bool b_top_field_first,
 void cc_storage_commit( cc_storage_t *p_ccs, block_t *p_pic );
 
 block_t * cc_storage_get_current( cc_storage_t *p_ccs, decoder_cc_desc_t * );
+vlc_ancillary_t * cc_storage_copy_last_vanc( cc_storage_t *p_ccs );
 
 /* */
 
@@ -41,4 +43,3 @@ typedef block_t * (*pf_annexb_nal_packetizer)(decoder_t *, bool *, block_t *);
 block_t *PacketizeXXC1( decoder_t *, uint8_t, block_t **, pf_annexb_nal_packetizer );
 
 #endif // HXXX_COMMON_H
-
