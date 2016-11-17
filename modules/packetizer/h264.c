@@ -131,6 +131,7 @@ struct decoder_sys_t
 
     /* */
     cc_storage_t *p_ccs;
+    vlc_ancillary_t *p_vanc;
 };
 
 #define BLOCK_FLAG_PRIVATE_AUD (1 << BLOCK_FLAG_PRIVATE_SHIFT)
@@ -140,6 +141,7 @@ struct decoder_sys_t
 static block_t *Packetize( decoder_t *, block_t ** );
 static block_t *PacketizeAVC1( decoder_t *, block_t ** );
 static block_t *GetCc( decoder_t *p_dec, decoder_cc_desc_t * );
+static vlc_ancillary_t *GetVanc( decoder_t *p_dec, int *p_mask );
 static void PacketizeFlush( decoder_t * );
 
 static void PacketizeReset( void *p_private, bool b_broken );
@@ -332,6 +334,7 @@ static int Open( vlc_object_t *p_this )
         free( p_dec->p_sys );
         return VLC_ENOMEM;
     }
+    p_sys->p_vanc = NULL;
 
     packetizer_Init( &p_sys->packetizer,
                      p_h264_startcode, sizeof(p_h264_startcode), startcode_FindAnnexB,
@@ -457,6 +460,7 @@ static int Open( vlc_object_t *p_this )
 
     /* CC are the same for H264/AVC in T35 sections (ETSI TS 101 154)  */
     p_dec->pf_get_cc = GetCc;
+    p_dec->pf_get_anc = GetVanc;
     p_dec->pf_flush = PacketizeFlush;
 
     return VLC_SUCCESS;
@@ -480,6 +484,9 @@ static void Close( vlc_object_t *p_this )
     packetizer_Clean( &p_sys->packetizer );
 
     cc_storage_delete( p_sys->p_ccs );
+
+    if( p_sys->p_vanc )
+        vlc_ancillary_StorageDelete( p_sys->p_vanc );
 
     free( p_sys );
 }
@@ -522,6 +529,17 @@ static block_t *PacketizeAVC1( decoder_t *p_dec, block_t **pp_block )
 static block_t *GetCc( decoder_t *p_dec, decoder_cc_desc_t *p_desc )
 {
     return cc_storage_get_current( p_dec->p_sys->p_ccs, p_desc );
+}
+
+/*****************************************************************************
+ * GetVanc:
+ *****************************************************************************/
+static vlc_ancillary_t *GetVanc( decoder_t *p_dec, int *p_mask )
+{
+    VLC_UNUSED( p_mask );
+    vlc_ancillary_t *p_anc = p_dec->p_sys->p_vanc;
+    p_dec->p_sys->p_vanc = NULL;
+    return p_anc;
 }
 
 /****************************************************************************
@@ -1158,6 +1176,15 @@ static bool ParseSeiCallback( const hxxx_sei_data_t *p_sei_data, void *cbdata )
                 if( p_anc )
                     vlc_ancillary_StorageAppend( &p_sys->p_vanc, p_anc );
             }
+            else if( p_sei_data->itu_t35.type == HXXX_ITU_T35_TYPE_AFD )
+            {
+                vlc_ancillary_t *p_anc = vlc_ancillary_New( ANCILLARY_AFD );
+                if( p_anc )
+                {
+                    p_anc->afd.val = p_sei_data->itu_t35.u.afd;
+                    vlc_ancillary_StorageAppend( &p_sys->p_vanc, p_anc );
+                }
+            }
         } break;
 
         case HXXX_SEI_FRAME_PACKING_ARRANGEMENT:
@@ -1202,4 +1229,3 @@ static bool ParseSeiCallback( const hxxx_sei_data_t *p_sei_data, void *cbdata )
 
     return true;
 }
-
