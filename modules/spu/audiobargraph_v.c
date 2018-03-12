@@ -282,7 +282,6 @@ static void Draw(BarGraph_t *b)
     for (int i = 0; i < 6; i++) {
         DrawHLines(p, h - 1 - level[i] - 1, 24, white, 1, 3);
         DrawHLines(p, h - 1 - level[i],     24, black, 2, 3);
-        DrawNumber(p, h, pixmap[i], level[i]);
     }
 
     int minus8  = iec_scale(- 8) * scale + 20;
@@ -421,6 +420,27 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
     p_region->i_y = p_sys->i_pos_y;
 
     p_spu->p_region = p_region;
+
+    fmt.i_chroma = VLC_CODEC_TEXT;
+
+
+    const char* text[] = {"10", "20", "30", "40", "50", "60"};
+    text_style_t* style = text_style_New();
+    style->i_font_size = 10;
+    subpicture_region_t* p_current_region = p_region;
+    for (int i = 0; i < 6; ++i)
+    {
+        int level = iec_scale(-(i+1) * 10) * p_BarGraph->scale + 20;
+        subpicture_region_t* spu_txt = subpicture_region_New(&fmt);
+        spu_txt->i_x = 10;
+        spu_txt->i_y = fmt.i_height -  level -4;
+        spu_txt->p_text = text_segment_New(text[i]);
+        spu_txt->p_text->style = text_style_Duplicate(style);
+        p_current_region->p_next = spu_txt;
+        p_current_region = spu_txt;
+    }
+    text_style_Delete(style);
+
 
     p_spu->i_alpha = p_BarGraph->i_alpha ;
 
