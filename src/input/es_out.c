@@ -515,12 +515,16 @@ static int EsOutSetRecord(  es_out_t *out, bool b_record )
         {
             es_out_id_t *p_es = p_sys->es[i];
 
-            if( !p_es->p_dec || p_es->p_master )
-                continue;
+            //if( !p_es->p_dec || p_es->p_master )
+            //    continue;
 
             p_es->p_dec_record = input_DecoderNew( p_input, &p_es->fmt, p_es->p_pgrm->p_clock, p_sys->p_sout_record );
             if( p_es->p_dec_record && p_sys->b_buffering )
                 input_DecoderStartWait( p_es->p_dec_record );
+
+            if ( !p_es->p_dec )
+                input_SendEventEsSelect( p_input, p_es->fmt.i_cat, p_es->i_id );
+
         }
     }
     else
@@ -606,11 +610,13 @@ static void EsOutChangePosition( es_out_t *out )
         {
             input_DecoderFlush( p_es->p_dec );
             if( !p_sys->b_buffering )
-            {
                 input_DecoderStartWait( p_es->p_dec );
-                if( p_es->p_dec_record != NULL )
-                    input_DecoderStartWait( p_es->p_dec_record );
-            }
+        }
+        if( p_es->p_dec_record != NULL )
+        {
+            input_DecoderFlush( p_es->p_dec_record );
+            if( !p_sys->b_buffering )
+                input_DecoderStartWait( p_es->p_dec_record );
         }
     }
 
@@ -684,10 +690,10 @@ static void EsOutDecodersStopBuffering( es_out_t *out, bool b_forced )
     for( int i = 0; i < p_sys->i_es; i++ )
     {
         es_out_id_t *p_es = p_sys->es[i];
-
-        if( !p_es->p_dec || p_es->fmt.i_cat == SPU_ES )
+        if (p_es->fmt.i_cat == SPU_ES)
             continue;
-        input_DecoderWait( p_es->p_dec );
+        if( p_es->p_dec )
+            input_DecoderWait( p_es->p_dec );
         if( p_es->p_dec_record )
             input_DecoderWait( p_es->p_dec_record );
     }
@@ -709,10 +715,9 @@ static void EsOutDecodersStopBuffering( es_out_t *out, bool b_forced )
     {
         es_out_id_t *p_es = p_sys->es[i];
 
-        if( !p_es->p_dec )
-            continue;
+        if( p_es->p_dec )
+             input_DecoderStopWait( p_es->p_dec );
 
-        input_DecoderStopWait( p_es->p_dec );
         if( p_es->p_dec_record )
             input_DecoderStopWait( p_es->p_dec_record );
     }
@@ -729,9 +734,9 @@ static void EsOutDecodersChangePause( es_out_t *out, bool b_paused, mtime_t i_da
         if( es->p_dec )
         {
             input_DecoderChangePause( es->p_dec, b_paused, i_date );
-            if( es->p_dec_record )
-                input_DecoderChangePause( es->p_dec_record, b_paused, i_date );
         }
+        if( es->p_dec_record )
+            input_DecoderChangePause( es->p_dec_record, b_paused, i_date );
     }
 }
 
@@ -1677,6 +1682,32 @@ static bool EsIsSelected( es_out_id_t *es )
         return es->p_dec != NULL;
     }
 }
+
+
+static bool EsIsSelectedOrStreaming( es_out_id_t *es )
+{
+     return EsIsSelected(es) || es->p_dec_record != NULL ;
+}
+
+
+static void EsCreateDecoderRec( es_out_t *out, es_out_id_t *p_es )
+{
+    es_out_sys_t   *p_sys = out->p_sys;
+    input_thread_t *p_input = p_sys->p_input;
+    if ( p_es->p_dec_record )
+        return ;
+    if( p_sys->p_sout_record )
+    {
+
+        p_es->p_dec_record = input_DecoderNew( p_input, &p_es->fmt, p_es->p_pgrm->p_clock, p_sys->p_sout_record );
+        if( p_es->p_dec_record && p_sys->b_buffering )
+            input_DecoderStartWait( p_es->p_dec_record );
+    }
+
+
+    EsOutDecoderChangeDelay( out, p_es );
+}
+
 static void EsCreateDecoder( es_out_t *out, es_out_id_t *p_es )
 {
     es_out_sys_t   *p_sys = out->p_sys;
@@ -1687,26 +1718,13 @@ static void EsCreateDecoder( es_out_t *out, es_out_id_t *p_es )
     {
         if( p_sys->b_buffering )
             input_DecoderStartWait( p_es->p_dec );
-
-        if( !p_es->p_master && p_sys->p_sout_record )
-        {
-            p_es->p_dec_record = input_DecoderNew( p_input, &p_es->fmt, p_es->p_pgrm->p_clock, p_sys->p_sout_record );
-            if( p_es->p_dec_record && p_sys->b_buffering )
-                input_DecoderStartWait( p_es->p_dec_record );
-        }
     }
-
-    EsOutDecoderChangeDelay( out, p_es );
 }
-static void EsDestroyDecoder( es_out_t *out, es_out_id_t *p_es )
+
+
+static void EsDestroyDecoderRec( es_out_t *out, es_out_id_t *p_es )
 {
-    VLC_UNUSED(out);
-
-    if( !p_es->p_dec )
-        return;
-
-    input_DecoderDelete( p_es->p_dec );
-    p_es->p_dec = NULL;
+     VLC_UNUSED(out);
 
     if( p_es->p_dec_record )
     {
@@ -1714,6 +1732,18 @@ static void EsDestroyDecoder( es_out_t *out, es_out_id_t *p_es )
         p_es->p_dec_record = NULL;
     }
 }
+
+static void EsDestroyDecoder( es_out_t *out, es_out_id_t *p_es )
+{
+    VLC_UNUSED(out);
+
+    if( p_es->p_dec )
+    {
+        input_DecoderDelete( p_es->p_dec );
+        p_es->p_dec = NULL;
+    }
+}
+
 
 static void EsSelect( es_out_t *out, es_out_id_t *es )
 {
@@ -1780,6 +1810,7 @@ static void EsSelect( es_out_t *out, es_out_id_t *es )
     input_SendEventEsSelect( p_input, es->fmt.i_cat, es->i_id );
     input_SendEventTeletextSelect( p_input, EsFmtIsTeletext( &es->fmt ) ? es->i_id : -1 );
 }
+
 
 static void EsDeleteCCChannels( es_out_t *out, es_out_id_t *parent )
 {
@@ -1865,7 +1896,8 @@ static void EsOutSelect( es_out_t *out, es_out_id_t *es, bool b_force )
         return;
     }
 
-    bool b_auto_unselect = p_esprops && p_sys->i_mode == ES_OUT_MODE_AUTO &&
+    bool b_auto_unselect = p_esprops && (p_sys->i_mode == ES_OUT_MODE_AUTO
+                                         || p_sys->i_mode == ES_OUT_MODE_BAR ) &&
                            p_esprops->e_policy == ES_OUT_ES_POLICY_EXCLUSIVE &&
                            p_esprops->p_main_es && p_esprops->p_main_es != es;
 
@@ -1900,7 +1932,7 @@ static void EsOutSelect( es_out_t *out, es_out_id_t *es, bool b_force )
             free( prgms );
         }
     }
-    else if( p_sys->i_mode == ES_OUT_MODE_AUTO )
+    else if( p_sys->i_mode == ES_OUT_MODE_AUTO  || p_sys->i_mode == ES_OUT_MODE_BAR )
     {
         const es_out_id_t *wanted_es = NULL;
 
@@ -1962,7 +1994,6 @@ static void EsOutSelect( es_out_t *out, es_out_id_t *es, bool b_force )
                     }
                 }
             }
-
         }
         /* If there is no user preference, select the default subtitle
          * or adapt by ES priority */
@@ -1986,8 +2017,16 @@ static void EsOutSelect( es_out_t *out, es_out_id_t *es, bool b_force )
         }
     }
 
+    if (p_sys->i_mode == ES_OUT_MODE_BAR)
+    {
+        if (! es->p_dec_record )
+        {
+            EsCreateDecoderRec( out, es );
+        }
+    }
+
     /* FIXME TODO handle priority here */
-    if( p_esprops && p_sys->i_mode == ES_OUT_MODE_AUTO && EsIsSelected( es ) )
+    if( p_esprops && (p_sys->i_mode == ES_OUT_MODE_AUTO || p_sys->i_mode == ES_OUT_MODE_BAR ) && EsIsSelected( es ) )
         p_esprops->p_main_es = es;
 }
 
@@ -2080,6 +2119,15 @@ static int EsOutSend( es_out_t *out, es_out_id_t *es, block_t *p_block )
             p_block->i_flags |= BLOCK_FLAG_PREROLL;
     }
 
+    /* Decode */
+    if( es->p_dec_record )
+    {
+        block_t *p_dup = block_Duplicate( p_block );
+        if( p_dup )
+            input_DecoderDecode( es->p_dec_record, p_dup,
+                                 input_priv(p_input)->b_out_pace_control );
+    }
+
     if( !es->p_dec )
     {
         block_Release( p_block );
@@ -2105,14 +2153,6 @@ static int EsOutSend( es_out_t *out, es_out_id_t *es, block_t *p_block )
         }
     }
 
-    /* Decode */
-    if( es->p_dec_record )
-    {
-        block_t *p_dup = block_Duplicate( p_block );
-        if( p_dup )
-            input_DecoderDecode( es->p_dec_record, p_dup,
-                                 input_priv(p_input)->b_out_pace_control );
-    }
     input_DecoderDecode( es->p_dec, p_block,
                          input_priv(p_input)->b_out_pace_control );
 
@@ -2145,7 +2185,7 @@ static int EsOutSend( es_out_t *out, es_out_id_t *es, block_t *p_block )
 /*****************************************************************************
  * EsOutDel:
  *****************************************************************************/
-static void EsOutDel( es_out_t *out, es_out_id_t *es )
+static void     EsOutDel( es_out_t *out, es_out_id_t *es )
 {
     es_out_sys_t *p_sys = out->p_sys;
     bool b_reselect = false;
@@ -2156,21 +2196,26 @@ static void EsOutDel( es_out_t *out, es_out_id_t *es )
     es_out_es_props_t *p_esprops = GetPropsByCat( p_sys, es->fmt.i_cat );
 
     /* We don't try to reselect */
-    if( es->p_dec )
+    if( es->p_dec || es->p_dec_record )
     {   /* FIXME: This might hold the ES output caller (i.e. the demux), and
          * the corresponding thread (typically the input thread), for a little
          * bit too long if the ES is deleted in the middle of a stream. */
-        input_DecoderDrain( es->p_dec );
+        if ( es->p_dec )
+            input_DecoderDrain( es->p_dec );
+        else
+            input_DecoderDrain( es->p_dec_record );
         while( !input_Stopped(p_sys->p_input) && !p_sys->b_buffering )
         {
-            if( input_DecoderIsEmpty( es->p_dec ) &&
-                ( !es->p_dec_record || input_DecoderIsEmpty( es->p_dec_record ) ))
+            if( ( !es->p_dec || input_DecoderIsEmpty( es->p_dec ) ) &&
+                ( !es->p_dec_record || input_DecoderIsEmpty( es->p_dec_record ) ) )
                 break;
             /* FIXME there should be a way to have auto deleted es, but there will be
              * a problem when another codec of the same type is created (mainly video) */
             msleep( 20*1000 );
         }
         EsUnselect( out, es, es->p_pgrm == p_sys->p_pgrm );
+        if (es->p_dec_record)
+            EsDestroyDecoderRec(out, es);
     }
 
     if( es->p_pgrm == p_sys->p_pgrm )
@@ -2264,7 +2309,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
         es_out_id_t *es = va_arg( args, es_out_id_t * );
         bool *pb = va_arg( args, bool * );
 
-        *pb = EsIsSelected( es );
+        *pb = EsIsSelectedOrStreaming( es );
         return VLC_SUCCESS;
     }
 
@@ -2291,7 +2336,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
         const int i_mode = va_arg( args, int );
         assert( i_mode == ES_OUT_MODE_NONE || i_mode == ES_OUT_MODE_ALL ||
                 i_mode == ES_OUT_MODE_AUTO || i_mode == ES_OUT_MODE_PARTIAL ||
-                i_mode == ES_OUT_MODE_END );
+                i_mode == ES_OUT_MODE_BAR  || i_mode == ES_OUT_MODE_END );
 
         if( i_mode != ES_OUT_MODE_NONE && !p_sys->b_active && p_sys->i_es > 0 )
         {
@@ -2311,6 +2356,11 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
         p_sys->b_active = i_mode != ES_OUT_MODE_NONE;
         p_sys->i_mode = i_mode;
 
+        if ( i_mode == ES_OUT_MODE_BAR )
+        {
+            if ( p_sys->p_sout_record == NULL )
+                p_sys->p_sout_record = sout_NewInstance( p_sys->p_input,  "#bargraph" );
+        }
         /* Reapply policy mode */
         for( int i = 0; i < p_sys->i_es; i++ )
         {
@@ -2349,14 +2399,18 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
             {
                 if( es == p_sys->es[i] )
                 {
-                    if( i_query == ES_OUT_RESTART_ES && p_sys->es[i]->p_dec )
+                    if( i_query == ES_OUT_RESTART_ES )
                     {
                         EsDestroyDecoder( out, p_sys->es[i] );
                         EsCreateDecoder( out, p_sys->es[i] );
+                        EsDestroyDecoderRec( out, p_sys->es[i] );
+                        EsCreateDecoderRec( out, p_sys->es[i] );
                     }
                     else if( i_query == ES_OUT_SET_ES )
                     {
                         EsOutSelect( out, es, true );
+
+                        EsCreateDecoderRec(out, p_sys->es[i]);
                     }
                     break;
                 }
@@ -2369,11 +2423,10 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
                     {
                         if( i_query == ES_OUT_RESTART_ES )
                         {
-                            if( p_sys->es[i]->p_dec )
-                            {
                                 EsDestroyDecoder( out, p_sys->es[i] );
                                 EsCreateDecoder( out, p_sys->es[i] );
-                            }
+                                EsDestroyDecoderRec( out, p_sys->es[i] );
+                                EsCreateDecoderRec( out, p_sys->es[i] );
                         }
                         else
                         {
@@ -2394,9 +2447,10 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
         selected_es[0] = p_sys->i_es;
         for( int i = 0; i < p_sys->i_es; i++ )
         {
-            if( EsIsSelected( p_sys->es[i] ) )
+            if( EsIsSelectedOrStreaming( p_sys->es[i] ) )
             {
                 EsDestroyDecoder( out, p_sys->es[i] );
+                EsDestroyDecoderRec(out, p_sys->es[i]);
                 selected_es[i + 1] = p_sys->es[i]->i_id;
             }
             else
@@ -2417,6 +2471,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
                 es_out_id_t *p_es = EsOutGetFromID( out, i_id );
                 EsCreateDecoder( out, p_es );
             }
+            EsCreateDecoderRec(out, p_sys->es[i]);
         }
         free(selected_es);
         return VLC_SUCCESS;
@@ -2580,6 +2635,8 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
             EsDestroyDecoder( out, es );
             EsCreateDecoder( out, es );
         }
+        EsDestroyDecoderRec( out, es );
+        EsCreateDecoderRec( out, es );
 
         return VLC_SUCCESS;
     }

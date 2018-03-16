@@ -30,6 +30,7 @@
 #endif
 #include <string.h>
 #include <math.h>
+#include <assert.h>
 
 #include <vlc_common.h>
 #include <vlc_plugin.h>
@@ -107,11 +108,27 @@ vlc_module_end ()
 /*****************************************************************************
  * Structure to hold the Bar Graph properties
  ****************************************************************************/
+
+typedef struct  {
+    int i_stream_id;
+    int i_nb_channels;
+    float channels_peaks[AOUT_CHAN_MAX];
+} bargraph_data_t;
+
+typedef struct {
+    vlc_mutex_t mutex;
+    int i_count_channels;
+    int i_streams;
+    int i_refcount;
+    bargraph_data_t** p_streams;
+} shared_bargraph_data_t;
+
+
+
 typedef struct
 {
     int i_alpha;       /* -1 means use default alpha */
-    int nbChannels;
-    int *i_values;
+    shared_bargraph_data_t *i_values;
     picture_t *p_pic;
     mtime_t date;
     int scale;
@@ -119,6 +136,31 @@ typedef struct
     int barWidth;
 
 } BarGraph_t;
+
+static void shared_bargraph_data_unref( shared_bargraph_data_t* p_shared_data )
+{
+    if (!p_shared_data)
+        return;
+    vlc_mutex_lock(&p_shared_data->mutex);
+    assert(p_shared_data->i_refcount >= 1);
+    p_shared_data->i_refcount--;
+    if (p_shared_data->i_refcount == 0)
+    {
+        TAB_CLEAN( p_shared_data->i_streams, p_shared_data->p_streams );
+        vlc_mutex_unlock(&p_shared_data->mutex);
+        free( p_shared_data );
+    }
+    else
+        vlc_mutex_unlock(&p_shared_data->mutex);
+}
+
+static void shared_bargraph_data_ref( shared_bargraph_data_t* p_shared_data )
+{
+    vlc_mutex_lock(&p_shared_data->mutex);
+    assert(p_shared_data->i_refcount >= 1);
+    p_shared_data->i_refcount++;
+    vlc_mutex_unlock(&p_shared_data->mutex);
+}
 
 /**
  * Private data holder
@@ -176,28 +218,6 @@ static float iec_scale(float dB)
     return 1.0f;
 }
 
-/*****************************************************************************
- * parse_i_values : parse i_values parameter and store the corresponding values
- *****************************************************************************/
-static void parse_i_values(BarGraph_t *p_BarGraph, char *i_values)
-{
-    char delim[] = ":";
-    char* tok;
-
-    p_BarGraph->nbChannels = 0;
-    free(p_BarGraph->i_values);
-    p_BarGraph->i_values = NULL;
-    char *res = strtok_r(i_values, delim, &tok);
-    while (res != NULL) {
-        p_BarGraph->nbChannels++;
-        p_BarGraph->i_values = xrealloc(p_BarGraph->i_values,
-                                          p_BarGraph->nbChannels*sizeof(int));
-        float db = log10(atof(res)) * 20;
-        p_BarGraph->i_values[p_BarGraph->nbChannels-1] = VLC_CLIP(iec_scale(db)*p_BarGraph->scale, 0, p_BarGraph->scale);
-        res = strtok_r(NULL, delim, &tok);
-    }
-}
-
 /* Drawing */
 
 static const uint8_t bright_red[4]   = { 76, 85, 0xff, 0xff };
@@ -243,14 +263,12 @@ static void DrawNumber(plane_t *p, int h, const uint8_t data[5], int l)
  *****************************************************************************/
 static void Draw(BarGraph_t *b)
 {
-    int nbChannels = b->nbChannels;
     int scale      = b->scale;
     int barWidth   = b->barWidth;
 
-    int w = 40;
-    if (nbChannels > 0)
-        w = 2 * nbChannels * barWidth + 30;
-    int h = scale + 30;
+    shared_bargraph_data_t *p_values  = b->i_values;
+    if (p_values == NULL)
+        return;
 
     int level[6];
     for (int i = 0; i < 6; i++)
@@ -258,9 +276,17 @@ static void Draw(BarGraph_t *b)
 
     if (b->p_pic)
         picture_Release(b->p_pic);
+
+    vlc_mutex_lock(&p_values->mutex);
+    int nbChannels = p_values->i_count_channels;
+    int w = 40;
+    if (nbChannels > 0)
+        w = 2 * nbChannels * barWidth + 30;
+    int h = scale + 30;
+
     b->p_pic = picture_New(VLC_FOURCC('Y','U','V','A'), w, h, 1, 1);
     if (!b->p_pic)
-        return;
+        goto end;
     picture_t *p_pic = b->p_pic;
     plane_t *p = p_pic->p;
 
@@ -270,15 +296,6 @@ static void Draw(BarGraph_t *b)
     Draw2VLines(p, scale, 20, black);
     Draw2VLines(p, scale, 22, white);
 
-    static const uint8_t pixmap[6][5] = {
-        { 0x17, 0x15, 0x15, 0x15, 0x17 },
-        { 0x77, 0x45, 0x75, 0x15, 0x77 },
-        { 0x77, 0x15, 0x75, 0x15, 0x77 },
-        { 0x17, 0x15, 0x75, 0x55, 0x57 },
-        { 0x77, 0x15, 0x75, 0x45, 0x77 },
-        { 0x77, 0x55, 0x75, 0x45, 0x77 },
-    };
-
     for (int i = 0; i < 6; i++) {
         DrawHLines(p, h - 1 - level[i] - 1, 24, white, 1, 3);
         DrawHLines(p, h - 1 - level[i],     24, black, 2, 3);
@@ -286,32 +303,43 @@ static void Draw(BarGraph_t *b)
 
     int minus8  = iec_scale(- 8) * scale + 20;
     int minus18 = iec_scale(-18) * scale + 20;
-    int *i_values  = b->i_values;
+
+
     const uint8_t *indicator_color = b->alarm ? bright_red : black;
 
-    for (int i = 0; i < nbChannels; i++) {
-        int pi = 30 + i * (5 + barWidth);
+    int pi = 30;
+    for (int i_stream = 0; i_stream < p_values->i_streams; i_stream++ )
+    {
+        bargraph_data_t* p_data = p_values->p_streams[i_stream];
+        for (int i = 0; i < p_data->i_nb_channels; i++) {
+            DrawHLines(p, h - 20 - 1, pi, indicator_color, 8, barWidth);
+            //printf("got value %f\n", p_data->channels_peaks[i]);
+            float db = log10(p_data->channels_peaks[i]) * 20;
+            db = VLC_CLIP(iec_scale(db)*b->scale, 0, b->scale);
 
-        DrawHLines(p, h - 20 - 1, pi, indicator_color, 8, barWidth);
+            for (int line = 20; line < db + 20; line++) {
+                if (line < minus18)
+                    DrawHLines(p, h - line - 1, pi, bright_green, 1, barWidth);
+                else if (line < minus8)
+                    DrawHLines(p, h - line - 1, pi, bright_yellow, 1, barWidth);
+                else
+                    DrawHLines(p, h - line - 1, pi, bright_red, 1, barWidth);
+            }
 
-        for (int line = 20; line < i_values[i] + 20; line++) {
-            if (line < minus18)
-                DrawHLines(p, h - line - 1, pi, bright_green, 1, barWidth);
-            else if (line < minus8)
-                DrawHLines(p, h - line - 1, pi, bright_yellow, 1, barWidth);
-            else
-                DrawHLines(p, h - line - 1, pi, bright_red, 1, barWidth);
+            for (int line = db + 20; line < scale + 20; line++) {
+                if (line < minus18)
+                    DrawHLines(p, h - line - 1, pi, green, 1, barWidth);
+                else if (line < minus8)
+                    DrawHLines(p, h - line - 1, pi, yellow, 1, barWidth);
+                else
+                    DrawHLines(p, h - line - 1, pi, red, 1, barWidth);
+            }
+            pi += 5 + barWidth;
         }
-
-        for (int line = i_values[i] + 20; line < scale + 20; line++) {
-            if (line < minus18)
-                DrawHLines(p, h - line - 1, pi, green, 1, barWidth);
-            else if (line < minus8)
-                DrawHLines(p, h - line - 1, pi, yellow, 1, barWidth);
-            else
-                DrawHLines(p, h - line - 1, pi, red, 1, barWidth);
-        }
+        pi += 5 + barWidth;
     }
+end:
+    vlc_mutex_unlock(&p_values->mutex);
 }
 
 /*****************************************************************************
@@ -334,8 +362,13 @@ static int BarGraphCallback(vlc_object_t *p_this, char const *psz_var,
     else if (!strcmp(psz_var, CFG_PREFIX "transparency"))
         p_BarGraph->i_alpha = VLC_CLIP(newval.i_int, 0, 255);
     else if (!strcmp(psz_var, CFG_PREFIX "i_values")) {
-        if (newval.psz_string)
-            parse_i_values(p_BarGraph, newval.psz_string);
+        shared_bargraph_data_t* p_shared_bargraph =  (shared_bargraph_data_t*)newval.p_address;
+        if (!p_BarGraph->i_values && p_shared_bargraph)
+        {
+            shared_bargraph_data_unref(p_BarGraph->i_values);
+            shared_bargraph_data_ref(p_shared_bargraph);
+        }
+        p_BarGraph->i_values = p_shared_bargraph;
         Draw(p_BarGraph);
     } else if (!strcmp(psz_var, CFG_PREFIX "alarm")) {
         p_BarGraph->alarm = newval.b_bool;
@@ -552,7 +585,6 @@ static int OpenCommon(vlc_object_t *p_this, bool b_sub)
     p_BarGraph->i_alpha = var_CreateGetInteger(p_filter, CFG_PREFIX "transparency");
     p_BarGraph->i_alpha = VLC_CLIP(p_BarGraph->i_alpha, 0, 255);
     p_BarGraph->i_values = NULL;
-    parse_i_values(p_BarGraph, &(char){ 0 });
     p_BarGraph->alarm = false;
 
     p_BarGraph->barWidth = var_CreateGetInteger(p_filter, CFG_PREFIX "barWidth");
@@ -564,7 +596,7 @@ static int OpenCommon(vlc_object_t *p_this, bool b_sub)
 
     vlc_mutex_init(&p_sys->lock);
     var_Create(p_filter->obj.libvlc, CFG_PREFIX "alarm", VLC_VAR_BOOL);
-    var_Create(p_filter->obj.libvlc, CFG_PREFIX "i_values", VLC_VAR_STRING);
+    var_Create(p_filter->obj.libvlc, CFG_PREFIX "i_values", VLC_VAR_ADDRESS);
 
     var_AddCallback(p_filter->obj.libvlc, CFG_PREFIX "alarm",
                     BarGraphCallback, p_sys);
@@ -621,6 +653,9 @@ static void Close(vlc_object_t *p_this)
     var_Destroy(p_filter->obj.libvlc, CFG_PREFIX "i_values");
     var_Destroy(p_filter->obj.libvlc, CFG_PREFIX "alarm");
 
+    if (p_sys->p_BarGraph.i_values)
+        shared_bargraph_data_unref(p_sys->p_BarGraph.i_values);
+
     if (p_sys->p_blend)
         filter_DeleteBlend(p_sys->p_blend);
 
@@ -628,8 +663,6 @@ static void Close(vlc_object_t *p_this)
 
     if (p_sys->p_BarGraph.p_pic)
         picture_Release(p_sys->p_BarGraph.p_pic);
-
-    free(p_sys->p_BarGraph.i_values);
 
     free(p_sys);
 }
