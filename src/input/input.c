@@ -1260,9 +1260,15 @@ static void InitPrograms( input_thread_t * p_input )
 
     /* Set up es_out */
     i_es_out_mode = ES_OUT_MODE_AUTO;
-    char *prgms = var_GetNonEmptyString( p_input, "programs" );
-    //if( input_priv(p_input)->p_sout && !input_priv(p_input)->p_renderer )
-    if( prgms || input_priv(p_input)->p_sout )
+    char *slave_sout = var_GetNonEmptyString( p_input, "slave-sout" );
+    char *prgms;
+    if ( slave_sout )
+    {
+        i_es_out_mode = ES_OUT_MODE_SLAVE_SOUT;
+
+    }
+    else if( (prgms = var_GetNonEmptyString( p_input, "programs" )) != NULL
+             || input_priv(p_input)->p_sout )
     {
         if( prgms  )
         {
@@ -1270,10 +1276,6 @@ static void InitPrograms( input_thread_t * p_input )
             if( strcmp( prgms, "all" ) == 0 )
             {
                 i_es_out_mode = ES_OUT_MODE_ALL;
-            }
-            else if( strcmp( prgms, "bargraph" ) == 0 )
-            {
-                i_es_out_mode = ES_OUT_MODE_BAR;
             }
             else
             {

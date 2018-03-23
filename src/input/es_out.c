@@ -1937,7 +1937,7 @@ static void EsOutSelect( es_out_t *out, es_out_id_t *es, bool b_force )
     }
 
     bool b_auto_unselect = p_esprops && (p_sys->i_mode == ES_OUT_MODE_AUTO
-                                         || p_sys->i_mode == ES_OUT_MODE_BAR ) &&
+                                         || p_sys->i_mode == ES_OUT_MODE_SLAVE_SOUT ) &&
                            p_esprops->e_policy == ES_OUT_ES_POLICY_EXCLUSIVE &&
                            p_esprops->p_main_es && p_esprops->p_main_es != es;
 
@@ -1972,7 +1972,7 @@ static void EsOutSelect( es_out_t *out, es_out_id_t *es, bool b_force )
             free( prgms );
         }
     }
-    else if( p_sys->i_mode == ES_OUT_MODE_AUTO  || p_sys->i_mode == ES_OUT_MODE_BAR )
+    else if( p_sys->i_mode == ES_OUT_MODE_AUTO  || p_sys->i_mode == ES_OUT_MODE_SLAVE_SOUT )
     {
         const es_out_id_t *wanted_es = NULL;
 
@@ -2057,7 +2057,7 @@ static void EsOutSelect( es_out_t *out, es_out_id_t *es, bool b_force )
         }
     }
 
-    if (p_sys->i_mode == ES_OUT_MODE_BAR)
+    if (p_sys->i_mode == ES_OUT_MODE_SLAVE_SOUT)
     {
         if (! es->p_dec_stream )
         {
@@ -2066,7 +2066,7 @@ static void EsOutSelect( es_out_t *out, es_out_id_t *es, bool b_force )
     }
 
     /* FIXME TODO handle priority here */
-    if( p_esprops && (p_sys->i_mode == ES_OUT_MODE_AUTO || p_sys->i_mode == ES_OUT_MODE_BAR ) && EsIsSelected( es ) )
+    if( p_esprops && (p_sys->i_mode == ES_OUT_MODE_AUTO || p_sys->i_mode == ES_OUT_MODE_SLAVE_SOUT ) && EsIsSelected( es ) )
         p_esprops->p_main_es = es;
 }
 
@@ -2384,7 +2384,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
         const int i_mode = va_arg( args, int );
         assert( i_mode == ES_OUT_MODE_NONE || i_mode == ES_OUT_MODE_ALL ||
                 i_mode == ES_OUT_MODE_AUTO || i_mode == ES_OUT_MODE_PARTIAL ||
-                i_mode == ES_OUT_MODE_BAR  || i_mode == ES_OUT_MODE_END );
+                i_mode == ES_OUT_MODE_SLAVE_SOUT  || i_mode == ES_OUT_MODE_END );
 
         if( i_mode != ES_OUT_MODE_NONE && !p_sys->b_active && p_sys->i_es > 0 )
         {
@@ -2404,10 +2404,14 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
         p_sys->b_active = i_mode != ES_OUT_MODE_NONE;
         p_sys->i_mode = i_mode;
 
-        if ( i_mode == ES_OUT_MODE_BAR )
+        if ( i_mode == ES_OUT_MODE_SLAVE_SOUT && p_sys->p_sout_stream == NULL )
         {
-            if ( p_sys->p_sout_stream == NULL )
-                p_sys->p_sout_stream = sout_NewInstance( p_sys->p_input,  "#bargraph" );
+            char* psz_sout = var_GetNonEmptyString( p_sys->p_input, "slave-sout");
+            if ( psz_sout )
+            {
+                p_sys->p_sout_stream = sout_NewInstance( p_sys->p_input, psz_sout );
+                free(psz_sout);
+            }
         }
         /* Reapply policy mode */
         for( int i = 0; i < p_sys->i_es; i++ )
