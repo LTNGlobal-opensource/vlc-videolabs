@@ -240,7 +240,7 @@ static int  decoder_queue_audio( decoder_t * p_dec, block_t * bloc)
 
     float i_value[AOUT_CHAN_MAX];
     float *p_sample = (float *)bloc->p_buffer;
-    int nbChannels = aout_FormatNbChannels(&p_dec->fmt_in.audio);
+    int nbChannels = aout_FormatNbChannels(&p_dec->fmt_out.audio);
 
     for (int i = 0; i < nbChannels; i++)
         i_value[i] = 0.;
@@ -251,7 +251,6 @@ static int  decoder_queue_audio( decoder_t * p_dec, block_t * bloc)
             if (ch > i_value[j])
                 i_value[j] = ch;
         }
-    //msg_Warn( p_dec, "decoder_queue_audio[%i]  %f", p_dec->fmt_in.i_id, i_value[0]);
     //send the values
     shared_bargraph_data_t* shared_data = id->p_sys->shared_data;
     bargraph_data_t* data = id->p_data;
@@ -274,21 +273,20 @@ static sout_stream_id_sys_t *Add( sout_stream_t *p_stream, const es_format_t *p_
     sout_stream_sys_t *p_sys = p_stream->p_sys;
     sout_stream_id_sys_t *id;
 
-
-    id = calloc( 1, sizeof(*id) );
-    if( !id )
-        return NULL;
-
     if ( p_fmt->i_cat == AUDIO_ES )
     {
-        msg_Err( p_stream, "add audio steam %i", p_fmt->i_id );
+        id = calloc( 1, sizeof(*id) );
+        if( !id )
+            return NULL;
+        id->p_sys = p_sys;
+
+        /* initialize decoder */
         id->p_decoder = vlc_object_create( p_stream, sizeof( decoder_t ) );
         if( !id->p_decoder )
             return NULL;
         id->p_decoder->p_module = NULL;
-        id->p_sys = p_sys;
 
-        es_format_Init( &id->p_decoder->fmt_out, p_fmt->i_cat, 0 );
+        es_format_Init( &id->p_decoder->fmt_out, AUDIO_ES, VLC_CODEC_F32L );
         es_format_Copy( &id->p_decoder->fmt_in, p_fmt );
         id->p_decoder->b_frame_drop_allowed = false;
 
@@ -296,7 +294,7 @@ static sout_stream_id_sys_t *Add( sout_stream_t *p_stream, const es_format_t *p_
         id->p_decoder->pf_queue_audio = decoder_queue_audio;
         id->p_decoder->p_queue_ctx = id;
         id->p_decoder->pf_aout_format_update = audio_update_format;
-        /* id->p_decoder->p_cfg = p_sys->p_audio_cfg; */
+
         id->p_decoder->p_module =
             module_need( id->p_decoder, "audio decoder", "$codec", false );
         if( !id->p_decoder->p_module )
