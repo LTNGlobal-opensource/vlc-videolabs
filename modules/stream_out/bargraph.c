@@ -83,6 +83,7 @@ static void              Del ( sout_stream_t *, sout_stream_id_sys_t * );
 static int               Send( sout_stream_t *, sout_stream_id_sys_t *, block_t* );
 
 typedef struct  {
+    char* psz_stream_name;
     int i_stream_id;
     int i_nb_channels;
     float channels_peaks[AOUT_CHAN_MAX];
@@ -162,6 +163,10 @@ static bargraph_data_t* shared_bargraph_data_add_stream(shared_bargraph_data_t* 
     bargraph_data_t* p_bargraph_data = calloc(1, sizeof(bargraph_data_t));
     p_bargraph_data->i_stream_id = p_fmt->i_id;
     p_bargraph_data->i_nb_channels = p_fmt->audio.i_channels;
+    if (p_fmt->psz_language)
+        asprintf(&p_bargraph_data->psz_stream_name, "%i [%s]", p_fmt->i_id, p_fmt->psz_language );
+    else
+        asprintf(&p_bargraph_data->psz_stream_name, "%i", p_fmt->i_id);
     vlc_mutex_lock(&p_data->mutex);
     TAB_APPEND( p_data->i_streams, p_data->p_streams, p_bargraph_data );
     shared_bargraph_data_sort_streams(p_data);
@@ -177,6 +182,8 @@ static void shared_bargraph_data_del_stream(shared_bargraph_data_t* p_data, barg
     shared_bargraph_data_sort_streams(p_data);
     p_data->i_count_channels -= p_bargraph_data->i_nb_channels;
     vlc_mutex_unlock(&p_data->mutex);
+    if (p_bargraph_data->psz_stream_name)
+        free(p_bargraph_data->psz_stream_name);
     free( p_bargraph_data );
 }
 

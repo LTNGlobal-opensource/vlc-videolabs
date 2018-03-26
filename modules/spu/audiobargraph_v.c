@@ -37,6 +37,7 @@
 #include <vlc_filter.h>
 #include <vlc_subpicture.h>
 #include <vlc_image.h>
+#include <vlc_memstream.h>
 
 /*****************************************************************************
  * Module descriptor
@@ -110,6 +111,7 @@ vlc_module_end ()
  ****************************************************************************/
 
 typedef struct  {
+    char* psz_stream_name;
     int i_stream_id;
     int i_nb_channels;
     float channels_peaks[AOUT_CHAN_MAX];
@@ -293,18 +295,18 @@ static void Draw(BarGraph_t *b)
     for (int i = 0 ; i < p_pic->i_planes ; i++)
         memset(p[i].p_pixels, 0x00, p[i].i_visible_lines * p[i].i_pitch);
 
-    Draw2VLines(p, scale, 20, black);
-    Draw2VLines(p, scale, 22, white);
-
-    for (int i = 0; i < 6; i++) {
-        DrawHLines(p, h - 1 - level[i] - 1, 24, white, 1, 3);
-        DrawHLines(p, h - 1 - level[i],     24, black, 2, 3);
-    }
+    //Draw2VLines(p, scale, 20, black);
+    //Draw2VLines(p, scale, 22, white);
+    //
+    //for (int i = 0; i < 6; i++) {
+    //    DrawHLines(p, h - 1 - level[i] - 1, 24, white, 1, 3);
+    //    DrawHLines(p, h - 1 - level[i],     24, black, 2, 3);
+    //}
 
     int minus8  = iec_scale(- 8) * scale + 20;
     int minus18 = iec_scale(-18) * scale + 20;
 
-
+    /*
     const uint8_t *indicator_color = b->alarm ? bright_red : black;
 
     int pi = 30;
@@ -338,6 +340,7 @@ static void Draw(BarGraph_t *b)
         }
         pi += 5 + barWidth;
     }
+   */
 end:
     vlc_mutex_unlock(&p_values->mutex);
 }
@@ -369,16 +372,16 @@ static int BarGraphCallback(vlc_object_t *p_this, char const *psz_var,
             shared_bargraph_data_ref(p_shared_bargraph);
         }
         p_BarGraph->i_values = p_shared_bargraph;
-        Draw(p_BarGraph);
+        //Draw(p_BarGraph);
     } else if (!strcmp(psz_var, CFG_PREFIX "alarm")) {
         p_BarGraph->alarm = newval.b_bool;
-        Draw(p_BarGraph);
+        //Draw(p_BarGraph);
     } else if (!strcmp(psz_var, CFG_PREFIX "barWidth")) {
         p_BarGraph->barWidth = newval.i_int;
-        Draw(p_BarGraph);
+        //Draw(p_BarGraph);
     } else if (!strcmp(psz_var, CFG_PREFIX "barHeight")) {
         p_BarGraph->scale = newval.i_int;
-        Draw(p_BarGraph);
+        //Draw(p_BarGraph);
     }
     p_sys->b_spu_update = true;
     vlc_mutex_unlock(&p_sys->lock);
@@ -406,6 +409,7 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
         return NULL;
     }
 
+    Draw(p_BarGraph);
     p_pic = p_BarGraph->p_pic;
 
     /* Allocate the subpicture internal data. */
@@ -437,7 +441,6 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
         goto exit;
     }
 
-    /* */
     picture_Copy(p_region->p_picture, p_pic);
 
     /*  where to locate the bar graph: */
@@ -461,20 +464,116 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
     text_style_t* style = text_style_New();
     style->i_font_size = 10;
     subpicture_region_t* p_current_region = p_region;
-    for (int i = 0; i < 6; ++i)
-    {
-        int level = iec_scale(-(i+1) * 10) * p_BarGraph->scale + 20;
-        subpicture_region_t* spu_txt = subpicture_region_New(&fmt);
-        spu_txt->i_x = 10;
-        spu_txt->i_y = fmt.i_height -  level -4;
-        spu_txt->p_text = text_segment_New(text[i]);
-        spu_txt->p_text->style = text_style_Duplicate(style);
-        p_current_region->p_next = spu_txt;
-        p_current_region = spu_txt;
+    //for (int i = 0; i < 6; ++i)
+    //{
+    //    int level = iec_scale(-(i+1) * 10) * p_BarGraph->scale + 20;
+    //    subpicture_region_t* spu_txt = subpicture_region_New(&fmt);
+    //    spu_txt->i_x = 10;
+    //    spu_txt->i_y = fmt.i_height -  level -4;
+    //    spu_txt->p_text = text_segment_New(text[i]);
+    //    spu_txt->p_text->style = text_style_Duplicate(style);
+    //    p_current_region->p_next = spu_txt;
+    //    p_current_region = spu_txt;
+    //}
+
+    fmt.i_chroma = VLC_CODEC_TEXT;
+    shared_bargraph_data_t *p_values  = p_BarGraph->i_values;
+
+    struct vlc_memstream svgtxt;
+    vlc_memstream_open(&svgtxt);
+    vlc_memstream_printf(&svgtxt,
+                         "<svg "
+                         "viewBox=\"0 0 %i %i\" "
+                         "width=\"%i\" height=\"%i\" "
+                         "xmlns=\"http://www.w3.org/2000/svg\">",
+                         800, 600, 800, 600);
+    static const int i_width = 10;
+    static const int i_sep = 5;
+    static const int i_height= 580;
+    static const int i_top = 10;
+    float scale = i_height;
+
+    int minus8  = scale - iec_scale(- 8) * scale;
+    int minus18 = scale - iec_scale(-18) * scale;
+
+    //draw scale
+    vlc_memstream_printf(&svgtxt, \
+        "<line x1=\"%i\" y1=\"%i\" x2=\"%i\" y2=\"%i\" style=\"stroke:#000000;stroke-width:2\" />",
+        20, i_top, 20, (int)(i_top + scale));
+    vlc_memstream_printf(&svgtxt, \
+        "<line x1=\"%i\" y1=\"%i\" x2=\"%i\" y2=\"%i\" style=\"stroke:#FFFFFF;stroke-width:2\" />",
+        22, i_top, 22, (int)(i_top + scale) );
+
+
+    for (int i = 0; i < 6; i++) {
+        int level = scale - iec_scale(-(i+1) * 10) * scale;
+        vlc_memstream_printf(&svgtxt, \
+            "<line x1=\"%i\" y1=\"%i\" x2=\"%i\" y2=\"%i\" style=\"stroke:#000000;stroke-width:2\" />",
+            20, i_top + level -  1, 28, i_top + level - 1);
+        vlc_memstream_printf(&svgtxt, \
+            "<line x1=\"%i\" y1=\"%i\" x2=\"%i\" y2=\"%i\" style=\"stroke:#FFFFFF;stroke-width:2\" />",
+            22, i_top + level + 1, 28, i_top + level +1);
+        vlc_memstream_printf(&svgtxt, \
+            "<text x=\"%i\" y=\"%i\" style=\"font-family: Arial; stroke: #FFFFFF; fill: #000000; stroke-width: 1; font-size: 16px;\">%s</text>",
+            2, i_top + level, text[i]);
     }
+
+#define DRAW_LEVEL(db, lvlmin, lvlmax, COLOR_BG, COLOR_FG) \
+            if (lvlmin <= db) { \
+                vlc_memstream_printf(&svgtxt, \
+                    "<rect x=\"%i\" y=\"%i\" width=\"%i\" height=\"%i\" style=\"fill: " COLOR_BG "\"/>", \
+                    i_x, (int)(i_top + lvlmax), i_width, (int)(lvlmin - lvlmax) ); \
+            } else if ( db <= lvlmax ) { \
+                vlc_memstream_printf(&svgtxt, \
+                    "<rect x=\"%i\" y=\"%i\" width=\"%i\" height=\"%i\" style=\"fill: " COLOR_FG "\"/>", \
+                    i_x, (int)(i_top + lvlmax), i_width, (int)(lvlmin - lvlmax) ); \
+            } else  { \
+                vlc_memstream_printf(&svgtxt, \
+                    "<rect x=\"%i\" y=\"%i\" width=\"%i\" height=\"%i\" style=\"fill: " COLOR_BG "\"/>", \
+                    i_x, (int)(i_top + lvlmax), i_width, (int)(db - lvlmax) ); \
+                vlc_memstream_printf(&svgtxt, \
+                    "<rect x=\"%i\" y=\"%i\" width=\"%i\" height=\"%i\" style=\"fill: " COLOR_FG "\"/>", \
+                    i_x, (int)(i_top + db ), i_width, (int)(lvlmin - db) ); \
+            }
+
+    int i_x = 30;
+    for (int i_stream = 0; i_stream < p_values->i_streams; i_stream++ )
+    {
+        bargraph_data_t* p_data = p_values->p_streams[i_stream];
+        int nbChannels = p_data->i_nb_channels;
+        for (int i = 0; i < nbChannels; i++)
+        {
+            float db = log10(p_data->channels_peaks[i]) * 20;
+            db = scale - VLC_CLIP(iec_scale(db)*scale, 0, scale);
+
+            DRAW_LEVEL(db, minus8, 0 , "#7D0000", "#FF0000");
+            DRAW_LEVEL(db, minus18 , minus8, "#808000", "#FFFF00");
+            DRAW_LEVEL(db, scale, minus18, "#008000", "#00FF00");
+            vlc_memstream_printf(&svgtxt, \
+                "<rect x=\"%i\" y=\"%i\" width=\"%i\" height=\"%i\" style=\"fill: #000000 \"/>", \
+                    i_x, (int)(scale + 10), i_width, 10 ); \
+
+            i_x += i_width + i_sep;
+        }
+        vlc_memstream_printf(&svgtxt, \
+            "<text x=\"%i\" y=\"%i\" style=\"text-anchor: middle; font-family: Arial; stroke: #FFFFFF; fill: #000000; stroke-width: 1; font-size: 12px; writing-mode: tb;\">%s</text>",
+            i_x + i_width / 2 , (int)(scale / 2), p_data->psz_stream_name);
+        i_x += i_width;
+    }
+#undef DRAW_LEVEL
+
+    vlc_memstream_puts(&svgtxt, "</svg>");
+    vlc_memstream_close(&svgtxt);
+
+    msg_Warn( p_filter, svgtxt.ptr );
+    subpicture_region_t* spu_txt = subpicture_region_New(&fmt);
+    spu_txt->p_text = text_segment_New(svgtxt.ptr);
+    p_current_region->p_next = spu_txt;
+    p_current_region = spu_txt;
+    spu_txt->p_text->style = text_style_Duplicate(style);
+    free(svgtxt.ptr);
+
     text_style_Delete(style);
-
-
     p_spu->i_alpha = p_BarGraph->i_alpha ;
 
 exit:
