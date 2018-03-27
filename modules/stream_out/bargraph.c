@@ -181,9 +181,9 @@ struct sout_stream_sys_t
 
 static int bargraph_data_cmp(const void* p_a, const void* p_b)
 {
-    bargraph_data_t* p_bd_a = (bargraph_data_t*) p_a;
-    bargraph_data_t* p_bd_b = (bargraph_data_t*) p_b;
-    return p_bd_a->i_stream_id - p_bd_b->i_stream_id;
+    bargraph_data_t** p_bd_a = (bargraph_data_t**) p_a;
+    bargraph_data_t** p_bd_b = (bargraph_data_t**) p_b;
+    return (*p_bd_a)->i_stream_id - (*p_bd_b)->i_stream_id;
 }
 
 static void shared_bargraph_data_sort_streams(shared_bargraph_data_t* p_data)
