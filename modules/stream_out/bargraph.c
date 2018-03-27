@@ -67,15 +67,11 @@ vlc_module_begin ()
     set_category( CAT_SOUT )
     set_subcategory( SUBCAT_SOUT_STREAM )
 
-    add_string( SOUT_CFG_PREFIX "dst-prefix", "", DST_PREFIX_TEXT,
-                DST_PREFIX_LONGTEXT, true )
-
     set_callbacks( Open, Close )
 vlc_module_end ()
 
 /* */
 static const char *const ppsz_sout_options[] = {
-    "dst-prefix",
     NULL
 };
 
@@ -253,6 +249,7 @@ static void shared_bargraph_data_del_stream(shared_bargraph_data_t* p_data, barg
     free( p_bargraph_data );
 }
 
+
 /*****************************************************************************
  * Open:
  *****************************************************************************/
@@ -290,7 +287,7 @@ static void Close( vlc_object_t * p_this )
     sout_stream_t *p_stream = (sout_stream_t*)p_this;
     sout_stream_sys_t *p_sys = p_stream->p_sys;
 
-    msg_Err( p_stream, "Close bargraph stream" );
+    msg_Warn( p_stream, "Close bargraph stream" );
 
     TAB_CLEAN( p_sys->i_id, p_sys->id );
     var_Destroy(p_this->obj.libvlc, "audiobargraph_v-alarm");
@@ -311,25 +308,44 @@ static int  decoder_queue_audio( decoder_t * p_dec, block_t * bloc)
 {
     sout_stream_id_sys_t *id = p_dec->p_queue_ctx;
 
-    float i_value[AOUT_CHAN_MAX];
-    float *p_sample = (float *)bloc->p_buffer;
     int nbChannels = aout_FormatNbChannels(&p_dec->fmt_out.audio);
+    float f_value[AOUT_CHAN_MAX];
 
-    for (int i = 0; i < nbChannels; i++)
-        i_value[i] = 0.;
+    if (p_dec->fmt_out.i_codec == VLC_CODEC_F32L)
+    {
+        for (int i = 0; i < nbChannels; i++)
+            f_value[i] = 0.;
 
-    for (size_t i = 0; i < bloc->i_nb_samples; i++)
-        for (int j = 0; j<nbChannels; j++) {
-            float ch = *p_sample++;
-            if (ch > i_value[j])
-                i_value[j] = ch;
-        }
+        float *p_sample = (float *)bloc->p_buffer;
+        for (size_t i = 0; i < bloc->i_nb_samples; i++)
+            for (int j = 0; j<nbChannels; j++) {
+                float ch = *p_sample++;
+                if (ch > f_value[j])
+                    f_value[j] = ch;
+            }
+    }
+    else if (p_dec->fmt_out.i_codec == VLC_CODEC_S32L)
+    {
+        int32_t i_value[AOUT_CHAN_MAX];
+        for (int i = 0; i < nbChannels; i++)
+            i_value[i] = 0.;
+
+        int32_t *p_sample = (int32_t *)bloc->p_buffer;
+        for (size_t i = 0; i < bloc->i_nb_samples; i++)
+            for (int j = 0; j<nbChannels; j++) {
+                int32_t ch = *p_sample++;
+                if (ch > i_value[j])
+                    i_value[j] = ch;
+            }
+        for (int i = 0; i < nbChannels; i++)
+            f_value[i] = (float)i_value[i] / 2147483648.f;
+    }
     //send the values
     shared_bargraph_data_t* shared_data = id->p_sys->shared_data;
     bargraph_data_t* data = id->p_data;
 
     vlc_mutex_lock(&shared_data->mutex);
-    memcpy(data->channels_peaks, i_value, nbChannels * sizeof(float));
+    memcpy(data->channels_peaks, f_value, nbChannels * sizeof(float));
     vlc_mutex_unlock(&shared_data->mutex);
     var_SetAddress(p_dec->obj.libvlc, "audiobargraph_v-i_values", shared_data);
 
@@ -348,6 +364,8 @@ static sout_stream_id_sys_t *Add( sout_stream_t *p_stream, const es_format_t *p_
 
     if ( p_fmt->i_cat == AUDIO_ES )
     {
+        msg_Warn( p_stream, "add audio steam %i", p_fmt->i_id );
+
         id = calloc( 1, sizeof(*id) );
         if( !id )
             return NULL;
@@ -359,6 +377,7 @@ static sout_stream_id_sys_t *Add( sout_stream_t *p_stream, const es_format_t *p_
             return NULL;
         id->p_decoder->p_module = NULL;
 
+        //FIXME VLC_CODEC_F32L is not respected
         es_format_Init( &id->p_decoder->fmt_out, AUDIO_ES, VLC_CODEC_F32L );
         es_format_Copy( &id->p_decoder->fmt_in, p_fmt );
         id->p_decoder->b_frame_drop_allowed = false;
@@ -378,12 +397,12 @@ static sout_stream_id_sys_t *Add( sout_stream_t *p_stream, const es_format_t *p_
     }
     else if ( p_fmt->i_cat == VIDEO_ES )
     {
-        msg_Err( p_stream, "add video steam %i", p_fmt->i_id );
+        msg_Warn( p_stream, "add video steam %i (discard)", p_fmt->i_id );
         return NULL;
     }
     else
     {
-        msg_Err( p_stream, "add other steam %i", p_fmt->i_id );
+        msg_Err( p_stream, "add other steam %i (discard)", p_fmt->i_id );
         return NULL;
     }
 
@@ -406,7 +425,7 @@ static void Del( sout_stream_t *p_stream, sout_stream_id_sys_t *id )
         return;
 
     assert( !id->id );
-    msg_Err( p_stream, "del audio steam %i", id->p_data->i_stream_id );
+    msg_Warn    ( p_stream, "del audio steam %i", id->p_data->i_stream_id );
 
     if ( id->p_data )
         shared_bargraph_data_del_stream( p_sys->shared_data, id->p_data );
