@@ -39,6 +39,8 @@
 #include <vlc_block.h>
 #include <vlc_sout.h>
 #include <vlc_fs.h>
+#include <vlc_iso_lang.h>
+#include "../../src/text/iso-639_def.h"
 #include <assert.h>
 
 /*****************************************************************************
@@ -81,6 +83,65 @@ static const char *const ppsz_sout_options[] = {
 static sout_stream_id_sys_t *Add( sout_stream_t *, const es_format_t * );
 static void              Del ( sout_stream_t *, sout_stream_id_sys_t * );
 static int               Send( sout_stream_t *, sout_stream_id_sys_t *, block_t* );
+
+static char *LanguageGetCode( const char *psz_lang )
+{
+    const iso639_lang_t *pl;
+
+    if( psz_lang == NULL || *psz_lang == '\0' )
+        return strdup("??");
+
+    for( pl = p_languages; pl->psz_eng_name != NULL; pl++ )
+    {
+        if( !strcasecmp( pl->psz_eng_name, psz_lang ) ||
+            !strcasecmp( pl->psz_iso639_1, psz_lang ) ||
+            !strcasecmp( pl->psz_iso639_2T, psz_lang ) ||
+            !strcasecmp( pl->psz_iso639_2B, psz_lang ) )
+            return strdup( pl->psz_iso639_1 );
+    }
+
+    return strdup("??");
+}
+
+static char *LanguageGetName( const char *psz_code )
+{
+    const iso639_lang_t *pl;
+
+    if( psz_code == NULL || !strcmp( psz_code, "und" ) )
+    {
+        return strdup( "" );
+    }
+
+    if( strlen( psz_code ) == 2 )
+    {
+        pl = GetLang_1( psz_code );
+    }
+    else if( strlen( psz_code ) == 3 )
+    {
+        pl = GetLang_2B( psz_code );
+        if( !strcmp( pl->psz_iso639_1, "??" ) )
+        {
+            pl = GetLang_2T( psz_code );
+        }
+    }
+    else
+    {
+        char *lang = LanguageGetCode( psz_code );
+        pl = GetLang_1( lang );
+        free( lang );
+    }
+
+    if( !strcmp( pl->psz_iso639_1, "??" ) )
+    {
+       return strdup( psz_code );
+    }
+    else
+    {
+        return strdup( vlc_gettext(pl->psz_eng_name) );
+    }
+}
+
+
 
 typedef struct  {
     char* psz_stream_name;
@@ -164,9 +225,14 @@ static bargraph_data_t* shared_bargraph_data_add_stream(shared_bargraph_data_t* 
     p_bargraph_data->i_stream_id = p_fmt->i_id;
     p_bargraph_data->i_nb_channels = p_fmt->audio.i_channels;
     if (p_fmt->psz_language)
-        asprintf(&p_bargraph_data->psz_stream_name, "%i [%s]", p_fmt->i_id, p_fmt->psz_language );
+    {
+        char* psz_lang = LanguageGetName( p_fmt->psz_language );
+        asprintf(&p_bargraph_data->psz_stream_name, "Track %i [%s]", p_fmt->i_id, psz_lang );
+        free( psz_lang );
+    }
     else
-        asprintf(&p_bargraph_data->psz_stream_name, "%i", p_fmt->i_id);
+        asprintf(&p_bargraph_data->psz_stream_name, "Track %i", p_fmt->i_id);
+
     vlc_mutex_lock(&p_data->mutex);
     TAB_APPEND( p_data->i_streams, p_data->p_streams, p_bargraph_data );
     shared_bargraph_data_sort_streams(p_data);
