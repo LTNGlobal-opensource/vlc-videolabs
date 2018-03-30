@@ -1,7 +1,5 @@
 audio_filterdir = $(pluginsdir)/audio_filter
 
-libaudiobargraph_a_plugin_la_SOURCES = audio_filter/audiobargraph_a.c
-libaudiobargraph_a_plugin_la_LIBADD = $(LIBM)
 libchorus_flanger_plugin_la_SOURCES = audio_filter/chorus_flanger.c
 libchorus_flanger_plugin_la_LIBADD = $(LIBM)
 libcompressor_plugin_la_SOURCES = audio_filter/compressor.c
@@ -35,7 +33,6 @@ libspatializer_plugin_la_SOURCES = \
 libspatializer_plugin_la_LIBADD = $(LIBM)
 
 audio_filter_LTLIBRARIES = \
-	libaudiobargraph_a_plugin.la \
 	libchorus_flanger_plugin.la \
 	libcompressor_plugin.la \
 	libequalizer_plugin.la \
