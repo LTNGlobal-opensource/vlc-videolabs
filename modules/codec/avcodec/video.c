@@ -330,6 +330,7 @@ static int lavc_UpdateVideoFormat(decoder_t *dec, AVCodecContext *ctx,
     if ( dec->fmt_in.video.mastering.max_luminance )
         dec->fmt_out.video.mastering = dec->fmt_in.video.mastering;
     dec->fmt_out.video.lighting = dec->fmt_in.video.lighting;
+    dec->fmt_out.video.i_interlaced = dec->fmt_in.video.i_interlaced;
 
     return decoder_UpdateVideoFormat(dec);
 }
