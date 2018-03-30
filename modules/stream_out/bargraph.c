@@ -310,12 +310,10 @@ static int  decoder_queue_audio( decoder_t * p_dec, block_t * bloc)
 
     int nbChannels = aout_FormatNbChannels(&p_dec->fmt_out.audio);
     float f_value[AOUT_CHAN_MAX];
+    memset(f_value, 0, sizeof(f_value));
 
     if (p_dec->fmt_out.i_codec == VLC_CODEC_F32L)
     {
-        for (int i = 0; i < nbChannels; i++)
-            f_value[i] = 0.;
-
         float *p_sample = (float *)bloc->p_buffer;
         for (size_t i = 0; i < bloc->i_nb_samples; i++)
             for (int j = 0; j<nbChannels; j++) {
@@ -327,8 +325,7 @@ static int  decoder_queue_audio( decoder_t * p_dec, block_t * bloc)
     else if (p_dec->fmt_out.i_codec == VLC_CODEC_S32L)
     {
         int32_t i_value[AOUT_CHAN_MAX];
-        for (int i = 0; i < nbChannels; i++)
-            i_value[i] = 0.;
+        memset(i_value, 0, sizeof(i_value));
 
         int32_t *p_sample = (int32_t *)bloc->p_buffer;
         for (size_t i = 0; i < bloc->i_nb_samples; i++)
@@ -339,6 +336,10 @@ static int  decoder_queue_audio( decoder_t * p_dec, block_t * bloc)
             }
         for (int i = 0; i < nbChannels; i++)
             f_value[i] = (float)i_value[i] / 2147483648.f;
+    }
+    else
+    {
+        msg_Err(p_dec, "unsupported audio format %.4s", (char*)&p_dec->fmt_out.i_codec);
     }
     //send the values
     shared_bargraph_data_t* shared_data = id->p_sys->shared_data;
