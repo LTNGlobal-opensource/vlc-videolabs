@@ -311,7 +311,7 @@ static char *DrawBargraph(BarGraph_t *p_BarGraph, int* pi_width, int* pi_height 
             i_scale_x_pos+2, i_top + level + 1, i_barWidth-2, i_top + level +1);
         vlc_memstream_printf(&svgtxt,
             "<text x=\"%i\" y=\"%i\" style=\"font-family: Arial; stroke: #FFFFFF; fill: #000000; stroke-width: 1; font-size: %ipx;\">%s</text>",
-            2, i_top + level, (int)(12 * log10(i_barWidth)), text[i]);
+            0, i_top + level, (int)(3 * sqrt(i_barWidth)), text[i]);
     }
 
 #define DRAW_LEVEL(db, lvlmin, lvlmax, COLOR_BG, COLOR_FG) \
@@ -354,7 +354,7 @@ static char *DrawBargraph(BarGraph_t *p_BarGraph, int* pi_width, int* pi_height 
         }
         vlc_memstream_printf(&svgtxt, \
             "<text x=\"%i\" y=\"%i\" style=\"text-anchor: middle; font-family: Arial; stroke: #FFFFFF; fill: #000000; stroke-width: 1; font-size: %ipx; writing-mode: tb;\">%s</text>",
-            i_x + i_barWidth / 2 , (int)(scale / 2), (int)(12 * log10(i_barWidth)), p_data->psz_stream_name);
+            i_x + i_barWidth / 2 , (int)(scale / 2), (int)(5 * sqrt(i_barWidth)), p_data->psz_stream_name);
         i_x += i_barWidth;
     }
 #undef DRAW_LEVEL
