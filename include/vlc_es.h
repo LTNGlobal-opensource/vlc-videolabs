@@ -370,6 +370,7 @@ struct video_format_t
         uint16_t MaxFALL; /* max frame average light level */
     } lighting;
     uint32_t i_cubemap_padding; /**< padding in pixels of the cube map faces */
+    int i_interlaced;
 };
 
 /**
