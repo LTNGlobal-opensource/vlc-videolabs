@@ -253,6 +253,7 @@ static int DecodeBlock( decoder_t *p_dec, block_t *p_block )
     p_dec->fmt_out.video.i_visible_height = p_dec->fmt_out.video.i_height = i_height;
     p_dec->fmt_out.video.i_sar_num = 1;
     p_dec->fmt_out.video.i_sar_den = 1;
+    p_dec->fmt_out.video.i_interlaced = i_interlace_type;
 
     if( i_color_type == PNG_COLOR_TYPE_PALETTE )
         png_set_palette_to_rgb( p_png );

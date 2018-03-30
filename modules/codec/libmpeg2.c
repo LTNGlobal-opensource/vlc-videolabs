@@ -666,6 +666,8 @@ static picture_t *GetNewPicture( decoder_t *p_dec )
         p_sys->p_info->sequence->picture_height;
     p_dec->fmt_out.video.i_sar_num = p_sys->i_sar_num;
     p_dec->fmt_out.video.i_sar_den = p_sys->i_sar_den;
+    p_dec->fmt_out.video.i_interlaced = p_sys->p_info->current_picture != NULL ?
+                !(p_sys->p_info->current_picture->flags & PIC_FLAG_PROGRESSIVE_FRAME) : 0;
 
     if( p_sys->p_info->sequence->frame_period > 0 )
     {
