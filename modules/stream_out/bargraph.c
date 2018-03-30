@@ -223,11 +223,11 @@ static bargraph_data_t* shared_bargraph_data_add_stream(shared_bargraph_data_t* 
     if (p_fmt->psz_language)
     {
         char* psz_lang = LanguageGetName( p_fmt->psz_language );
-        asprintf(&p_bargraph_data->psz_stream_name, "Track %i [%s]", p_fmt->i_id, psz_lang );
+        asprintf(&p_bargraph_data->psz_stream_name, "%i [%s]", p_fmt->i_id, p_fmt->psz_language );
         free( psz_lang );
     }
     else
-        asprintf(&p_bargraph_data->psz_stream_name, "Track %i", p_fmt->i_id);
+        asprintf(&p_bargraph_data->psz_stream_name, "%i", p_fmt->i_id);
 
     vlc_mutex_lock(&p_data->mutex);
     TAB_APPEND( p_data->i_streams, p_data->p_streams, p_bargraph_data );

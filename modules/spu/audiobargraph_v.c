@@ -89,8 +89,8 @@ vlc_module_begin ()
     add_integer(CFG_PREFIX "position", -1, POS_TEXT, POS_LONGTEXT, false)
         change_integer_list(pi_pos_values, ppsz_pos_descriptions)
     add_obsolete_integer(CFG_PREFIX "alarm")
-    add_integer(CFG_PREFIX "barWidth", 20, BARWIDTH_TEXT, BARWIDTH_LONGTEXT, true)
-    add_integer(CFG_PREFIX "barHeight", 400, BARHEIGHT_TEXT, BARHEIGHT_LONGTEXT, true)
+    add_integer(CFG_PREFIX "barWidth", 30, BARWIDTH_TEXT, BARWIDTH_LONGTEXT, true)
+    add_integer(CFG_PREFIX "barHeight", 300, BARHEIGHT_TEXT, BARHEIGHT_LONGTEXT, true)
 
 vlc_module_end ()
 
@@ -124,6 +124,7 @@ typedef struct
 {
     int i_alpha;       /* -1 means use default alpha */
     shared_bargraph_data_t *p_data;
+    picture_t *p_pic;
     mtime_t date;
     int barHeight;
     bool alarm;
@@ -211,6 +212,117 @@ static float iec_scale(float dB)
 }
 
 /* Drawing */
+
+static const uint8_t bright_red[4]   = { 76, 85, 0xff, 0xff };
+static const uint8_t black[4] = { 0x00, 0x80, 0x80, 0xff };
+static const uint8_t white[4] = { 0xff, 0x80, 0x80, 0xff };
+static const uint8_t bright_green[4] = { 150, 44, 21, 0xff };
+static const uint8_t bright_yellow[4] = { 226, 1, 148, 0xff };
+static const uint8_t green[4] = { 74, 85, 74, 0xff };
+static const uint8_t yellow[4] = { 112, 64, 138, 0xff };
+static const uint8_t red[4] = { 37, 106, 191, 0xff };
+
+static inline void DrawHLine(plane_t *p, int line, int col, const uint8_t color[4], int w)
+{
+    for (int j = 0; j < 4; j++)
+        memset(&p[j].p_pixels[line * p[j].i_pitch + col], color[j], w);
+}
+
+static void Draw2VLines(plane_t *p, int barheight, int col, const uint8_t color[4])
+{
+    for (int i = 10; i < barheight + 10; i++)
+        DrawHLine(p, i, col, color, 2);
+}
+
+static void DrawHLines(plane_t *p, int line, int col, const uint8_t color[4], int h, int w)
+{
+    for (int i = line; i < line + h; i++)
+        DrawHLine(p, i, col, color, w);
+}
+
+/*****************************************************************************
+ * Draw: creates and returns the bar graph image
+ *****************************************************************************/
+static void Draw(BarGraph_t *b)
+{
+    int barHeight      = b->barHeight;
+    int barWidth   = b->barWidth;
+
+    shared_bargraph_data_t *p_values  = b->p_data;
+    if (p_values == NULL)
+        return;
+
+    int level[6];
+    for (int i = 0; i < 6; i++)
+        level[i] = iec_scale(-(i+1) * 10) * barHeight + 20;
+
+    if (b->p_pic)
+        picture_Release(b->p_pic);
+
+    vlc_mutex_lock(&p_values->mutex);
+    int w = barWidth;
+    for (int i_stream = 0; i_stream < p_values->i_streams; i_stream++ )
+    {
+        w += (p_values->p_streams[i_stream]->i_nb_channels + 1) * (5 + barWidth);
+    }
+    int h = barHeight + 30;
+
+    b->p_pic = picture_New(VLC_FOURCC('Y','U','V','A'), w, h, 1, 1);
+    if (!b->p_pic)
+        goto end;
+    picture_t *p_pic = b->p_pic;
+    plane_t *p = p_pic->p;
+
+    for (int i = 0 ; i < p_pic->i_planes ; i++)
+        memset(p[i].p_pixels, 0x00, p[i].i_visible_lines * p[i].i_pitch);
+
+    Draw2VLines(p, barHeight, barWidth - 10, black);
+    Draw2VLines(p, barHeight, barWidth - 8, white);
+
+    for (int i = 0; i < 6; i++) {
+        DrawHLines(p, h - 1 - level[i] - 1, barWidth - 6, white, 1, 3);
+        DrawHLines(p, h - 1 - level[i],     barWidth - 6, black, 2, 3);
+    }
+
+    int minus8  = iec_scale(- 8) * barHeight + 20;
+    int minus18 = iec_scale(-18) * barHeight + 20;
+
+    const uint8_t *indicator_color = b->alarm ? bright_red : black;
+
+    int pi = barWidth;
+    for (int i_stream = 0; i_stream < p_values->i_streams; i_stream++ )
+    {
+        bargraph_data_t* p_data = p_values->p_streams[i_stream];
+        for (int i = 0; i < p_data->i_nb_channels; i++) {
+            DrawHLines(p, h - 20 - 1, pi, indicator_color, 8, barWidth);
+            float db = log10(p_data->channels_peaks[i]) * 20;
+            db = VLC_CLIP(iec_scale(db)*b->barHeight, 0, b->barHeight);
+
+            for (int line = 20; line < db + 20; line++) {
+                if (line < minus18)
+                    DrawHLines(p, h - line - 1, pi, bright_green, 1, barWidth);
+                else if (line < minus8)
+                    DrawHLines(p, h - line - 1, pi, bright_yellow, 1, barWidth);
+                else
+                    DrawHLines(p, h - line - 1, pi, bright_red, 1, barWidth);
+            }
+
+            for (int line = db + 20; line < barHeight + 20; line++) {
+                if (line < minus18)
+                    DrawHLines(p, h - line - 1, pi, green, 1, barWidth);
+                else if (line < minus8)
+                    DrawHLines(p, h - line - 1, pi, yellow, 1, barWidth);
+                else
+                    DrawHLines(p, h - line - 1, pi, red, 1, barWidth);
+            }
+            pi += 5 + barWidth;
+        }
+        pi += 5 + barWidth;
+    }
+end:
+    vlc_mutex_unlock(&p_values->mutex);
+}
+
 /*****************************************************************************
  * Callback to update params on the fly
  *****************************************************************************/
@@ -377,6 +489,11 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
     filter_sys_t *p_sys = p_filter->p_sys;
     BarGraph_t *p_BarGraph = &(p_sys->p_BarGraph);
 
+    subpicture_t *p_spu;
+    subpicture_region_t *p_region;
+    video_format_t fmt;
+    picture_t *p_pic;
+
     vlc_mutex_lock(&p_sys->lock);
     /* Basic test:  b_spu_update occurs on a dynamic change */
     if (!p_sys->b_spu_update || p_sys->p_BarGraph.p_data == NULL) {
@@ -384,15 +501,12 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
         return NULL;
     }
 
-    /* Allocate the subpicture internal data. */
-    subpicture_t *p_spu = filter_NewSubpicture(p_filter);
-    if (!p_spu)
-        goto exit;
+    Draw(p_BarGraph);
+    p_pic = p_BarGraph->p_pic;
 
-    int i_width;
-    int i_height;
-    char *psz_svg = DrawBargraph(p_BarGraph, &i_width, &i_height);
-    if (!psz_svg)
+    /* Allocate the subpicture internal data. */
+    p_spu = filter_NewSubpicture(p_filter);
+    if (!p_spu)
         goto exit;
 
     p_spu->b_absolute = p_sys->b_absolute;
@@ -400,27 +514,26 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
     p_spu->i_stop = 0;
     p_spu->b_ephemer = true;
 
-
+    /* Send an empty subpicture to clear the display when needed */
+    if (!p_pic || !p_BarGraph->i_alpha)
+        goto exit;
 
     /* Create new SPU region */
-    video_format_t fmt;
     memset(&fmt, 0, sizeof(video_format_t));
-
-    fmt.i_chroma = VLC_CODEC_TEXT;
-    //fixme usefull?
+    fmt.i_chroma = VLC_CODEC_YUVA;
     fmt.i_sar_num = fmt.i_sar_den = 1;
-    fmt.i_width = fmt.i_visible_width = i_width;
-    fmt.i_height = fmt.i_visible_height = i_height;
+    fmt.i_width = fmt.i_visible_width = p_pic->p[Y_PLANE].i_visible_pitch;
+    fmt.i_height = fmt.i_visible_height = p_pic->p[Y_PLANE].i_visible_lines;
     fmt.i_x_offset = fmt.i_y_offset = 0;
-
-
-    subpicture_region_t *p_region = subpicture_region_New(&fmt);
+    p_region = subpicture_region_New(&fmt);
     if (!p_region) {
         msg_Err(p_filter, "cannot allocate SPU region");
         subpicture_Delete(p_spu);
         p_spu = NULL;
         goto exit;
     }
+
+    picture_Copy(p_region->p_picture, p_pic);
 
     /*  where to locate the bar graph: */
     if (p_sys->i_pos < 0) {   /*  set to an absolute xy */
@@ -436,16 +549,44 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
 
     p_spu->p_region = p_region;
 
+    fmt.i_chroma = VLC_CODEC_TEXT;
+
+    const char* text[] = {"10", "20", "30", "40", "50", "60"};
     text_style_t* style = text_style_New();
-    style->i_font_size = 10;
+    style->i_font_size = 3 * sqrt(p_BarGraph->barWidth);
 
-    msg_Dbg( p_filter, "%s", psz_svg );
+    subpicture_region_t* p_current_region = p_region;
+    for (int i = 0; i < 6; ++i)
+    {
+        int level = iec_scale(-(i+1) * 10) * p_BarGraph->barHeight + 20;
+        subpicture_region_t* spu_txt = subpicture_region_New(&fmt);
+        spu_txt->i_x = 0;
+        spu_txt->i_y = fmt.i_height - level - 4;
+        spu_txt->p_text = text_segment_New(text[i]);
+        spu_txt->p_text->style = text_style_Duplicate(style);
+        p_current_region->p_next = spu_txt;
+        p_current_region = spu_txt;
+    }
 
-    p_region->p_text = text_segment_New(psz_svg);
-    p_region->p_text->style = text_style_Duplicate(style);
-    free(psz_svg);
+    vlc_mutex_lock( &p_BarGraph->p_data->mutex );
+    int i_x = p_BarGraph->barWidth;
+    for (int i_stream = 0; i_stream < p_BarGraph->p_data->i_streams; i_stream++ )
+    {
+        bargraph_data_t* p_stream =  p_BarGraph->p_data->p_streams[i_stream];
+        const char* txt = p_stream->psz_stream_name;
+        subpicture_region_t* spu_txt = subpicture_region_New(&fmt);
+        spu_txt->i_x = i_x;
+        spu_txt->i_y = p_BarGraph->barHeight + 20;
+        spu_txt->p_text = text_segment_New(txt);
+        spu_txt->p_text->style = text_style_Duplicate(style);
+
+        p_current_region->p_next = spu_txt;
+        p_current_region = spu_txt;
+        i_x += ((p_BarGraph->barWidth + 5 ) * (p_stream->i_nb_channels + 1)) ;
+    }
+    vlc_mutex_unlock( &p_BarGraph->p_data->mutex );
+
     text_style_Delete(style);
-
     p_spu->i_alpha = p_BarGraph->i_alpha ;
 exit:
     vlc_mutex_unlock(&p_sys->lock);
@@ -475,6 +616,7 @@ static int OpenSub(vlc_object_t *p_this)
     p_sys->i_pos_x = var_CreateGetInteger(p_filter, CFG_PREFIX "x");
     p_sys->i_pos_y = var_CreateGetInteger(p_filter, CFG_PREFIX "y");
     BarGraph_t *p_BarGraph = &p_sys->p_BarGraph;
+    p_BarGraph->p_pic = NULL;
     p_BarGraph->i_alpha = var_CreateGetInteger(p_filter, CFG_PREFIX "transparency");
     p_BarGraph->i_alpha = VLC_CLIP(p_BarGraph->i_alpha, 0, 255);
     p_BarGraph->p_data = NULL;
@@ -527,6 +669,9 @@ static void Close(vlc_object_t *p_this)
         shared_bargraph_data_unref(p_sys->p_BarGraph.p_data);
 
     vlc_mutex_destroy(&p_sys->lock);
+
+    if (p_sys->p_BarGraph.p_pic)
+        picture_Release(p_sys->p_BarGraph.p_pic);
 
     free(p_sys);
 }
