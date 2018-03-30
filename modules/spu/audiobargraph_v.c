@@ -238,16 +238,12 @@ static int BarGraphCallback(vlc_object_t *p_this, char const *psz_var,
             shared_bargraph_data_ref(p_shared_bargraph);
         }
         p_BarGraph->p_data = p_shared_bargraph;
-        //Draw(p_BarGraph);
     } else if (!strcmp(psz_var, CFG_PREFIX "alarm")) {
         p_BarGraph->alarm = newval.b_bool;
-        //Draw(p_BarGraph);
     } else if (!strcmp(psz_var, CFG_PREFIX "barWidth")) {
         p_BarGraph->barWidth = newval.i_int;
-        //Draw(p_BarGraph);
     } else if (!strcmp(psz_var, CFG_PREFIX "barHeight")) {
         p_BarGraph->barHeight = newval.i_int;
-        //Draw(p_BarGraph);
     }
     p_sys->b_spu_update = true;
     vlc_mutex_unlock(&p_sys->lock);
