@@ -786,7 +786,8 @@ static block_t *ParseMPEGBlock( decoder_t *p_dec, block_t *p_frag )
             p_sys->i_top_field_first   = p_frag->p_buffer[7] >> 7;
             p_sys->i_repeat_first_field= (p_frag->p_buffer[7]>>1)&0x01;
             p_sys->i_progressive_frame = p_frag->p_buffer[8] >> 7;
-            p_dec->fmt_out.video.i_interlaced = !p_sys->i_progressive_frame;
+            p_dec->fmt_out.video.i_interlaced =
+                    (p_sys->i_progressive_frame != 0) ? INTERLACED_PROGRESSIVE : INTERLACED_INTERLACED;
         }
         else if( extid == SEQUENCE_DISPLAY_EXTENSION_ID && p_frag->i_buffer > 8 )
         {

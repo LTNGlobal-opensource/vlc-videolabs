@@ -199,7 +199,8 @@ static void ActivateSets( decoder_t *p_dec, const h264_sequence_parameter_set_t 
     {
         p_dec->fmt_out.i_profile = p_sps->i_profile;
         p_dec->fmt_out.i_level = p_sps->i_level;
-        p_dec->fmt_out.video.i_interlaced =  p_sps->frame_mbs_only_flag == 0;
+        p_dec->fmt_out.video.i_interlaced =
+                (p_sps->frame_mbs_only_flag != 0) ? INTERLACED_PROGRESSIVE : INTERLACED_INTERLACED;
 
         (void) h264_get_picture_size( p_sps, &p_dec->fmt_out.video.i_width,
                                       &p_dec->fmt_out.video.i_height,
