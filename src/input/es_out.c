@@ -195,6 +195,7 @@ static int          EsOutSetRecord(  es_out_t *, bool b_record );
 static bool EsIsSelected( es_out_id_t *es );
 static void EsSelect( es_out_t *out, es_out_id_t *es );
 static void EsDeleteInfo( es_out_t *, es_out_id_t *es );
+static void EsDestroyDecoderStream( es_out_t *out, es_out_id_t *p_es );
 static void EsUnselect( es_out_t *out, es_out_id_t *es, bool b_update );
 static void EsOutDecoderChangeDelay( es_out_t *out, es_out_id_t *p_es );
 static void EsOutDecodersChangePause( es_out_t *out, bool b_paused, mtime_t i_date );
@@ -1045,9 +1046,14 @@ static void EsOutProgramSelect( es_out_t *out, es_out_pgrm_t *p_pgrm )
 
         for( i = 0; i < p_sys->i_es; i++ )
         {
-            if( p_sys->es[i]->p_pgrm == old && EsIsSelected( p_sys->es[i] ) &&
+            if( p_sys->es[i]->p_pgrm == old &&
                 p_sys->i_mode != ES_OUT_MODE_ALL )
-                EsUnselect( out, p_sys->es[i], true );
+            {
+                if (EsIsSelected( p_sys->es[i] ))
+                    EsUnselect( out, p_sys->es[i], true );
+                if (p_sys->es[i]->p_dec_stream)
+                    EsDestroyDecoderStream(out, p_sys->es[i]);
+            }
         }
 
         p_sys->audio.p_main_es = NULL;
