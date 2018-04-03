@@ -207,6 +207,7 @@ static void shared_bargraph_data_unref( shared_bargraph_data_t* p_shared_data )
     {
         TAB_CLEAN( p_shared_data->i_streams, p_shared_data->p_streams );
         vlc_mutex_unlock(&p_shared_data->mutex);
+        vlc_mutex_destroy(&p_shared_data->mutex);
         free( p_shared_data );
     }
     else
@@ -291,6 +292,7 @@ static void Close( vlc_object_t * p_this )
 
     TAB_CLEAN( p_sys->i_id, p_sys->id );
     var_Destroy(p_this->obj.libvlc, "audiobargraph_v-alarm");
+    var_SetAddress(p_this->obj.libvlc, "audiobargraph_v-i_values", NULL);
     var_Destroy(p_this->obj.libvlc, "audiobargraph_v-i_values");
     shared_bargraph_data_unref( p_sys->shared_data );
     free( p_sys );
