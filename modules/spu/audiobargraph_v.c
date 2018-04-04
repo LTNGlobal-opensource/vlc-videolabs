@@ -243,9 +243,12 @@ static void DrawHLines(plane_t *p, int line, int col, const uint8_t color[4], in
 /*****************************************************************************
  * Draw: creates and returns the bar graph image
  *****************************************************************************/
-static void Draw(BarGraph_t *b)
+static void Draw(BarGraph_t *b, int* pi_graph_width, int* pi_graph_height)
 {
-    int barHeight      = b->barHeight;
+    assert(pi_graph_width != NULL);
+    assert(pi_graph_height != NULL);
+
+    int barHeight  = b->barHeight;
     int barWidth   = b->barWidth;
 
     shared_bargraph_data_t *p_values  = b->p_data;
@@ -266,6 +269,8 @@ static void Draw(BarGraph_t *b)
         w += (p_values->p_streams[i_stream]->i_nb_channels + 1) * (5 + barWidth);
     }
     int h = barHeight + 30;
+    *pi_graph_width = w;
+    *pi_graph_height = h;
 
     b->p_pic = picture_New(VLC_FOURCC('Y','U','V','A'), w, h, 1, 1);
     if (!b->p_pic)
@@ -481,6 +486,29 @@ exit:
     return svgtxt.ptr;
 }
 
+//FIXME: the center position is broken i_x and i_y are ignored
+static void SubAlignText(subpicture_region_t* p_spu, int i_align, int i_width, int i_height, int i_font_width, int i_font_height)
+{
+    if (i_align < 0)
+    {
+        p_spu->i_align = SUBPICTURE_ALIGN_LEFT | SUBPICTURE_ALIGN_TOP;
+        return;
+    }
+
+    p_spu->i_align = i_align;
+
+    if ( ( p_spu->i_align & (SUBPICTURE_ALIGN_LEFT | SUBPICTURE_ALIGN_RIGHT) ) == 0 )
+        p_spu->i_align |= SUBPICTURE_ALIGN_LEFT;
+    if ( ( p_spu->i_align & (SUBPICTURE_ALIGN_TOP | SUBPICTURE_ALIGN_BOTTOM) ) == 0 )
+        p_spu->i_align |= SUBPICTURE_ALIGN_TOP;
+
+    if ( (i_align & SUBPICTURE_ALIGN_RIGHT) != 0 && (i_align & SUBPICTURE_ALIGN_LEFT) == 0)
+        p_spu->i_x = i_width - p_spu->i_x - i_font_width;
+
+    if ( (i_align & SUBPICTURE_ALIGN_BOTTOM) != 0 && (i_align & SUBPICTURE_ALIGN_TOP) == 0)
+        p_spu->i_y = i_height - p_spu->i_y - i_font_height;
+}
+
 /**
  * Sub source
  */
@@ -501,7 +529,10 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
         return NULL;
     }
 
-    Draw(p_BarGraph);
+    int i_bargraph_width;
+    int i_bargraph_height;
+    Draw(p_BarGraph, &i_bargraph_width, &i_bargraph_height);
+
     p_pic = p_BarGraph->p_pic;
 
     /* Allocate the subpicture internal data. */
@@ -541,6 +572,10 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
         p_spu->b_absolute = true;
     } else {   /* set to one of the 9 relative locations */
         p_region->i_align = p_sys->i_pos;
+        if ((p_region->i_align & (SUBPICTURE_ALIGN_RIGHT | SUBPICTURE_ALIGN_LEFT)) == 0)
+            p_region->i_align |= SUBPICTURE_ALIGN_LEFT;
+        if ((p_region->i_align & (SUBPICTURE_ALIGN_TOP | SUBPICTURE_ALIGN_BOTTOM)) == 0)
+            p_region->i_align |= SUBPICTURE_ALIGN_TOP;
         p_spu->b_absolute = false;
     }
 
@@ -553,7 +588,9 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
 
     const char* text[] = {"10", "20", "30", "40", "50", "60"};
     text_style_t* style = text_style_New();
-    style->i_font_size = 3 * sqrt(p_BarGraph->barWidth);
+    int i_font_width = p_BarGraph->barWidth * 0.5;
+    int i_font_height = p_BarGraph->barWidth * 0.35;
+    style->i_font_size = i_font_width;
 
     subpicture_region_t* p_current_region = p_region;
     for (int i = 0; i < 6; ++i)
@@ -564,6 +601,8 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
         spu_txt->i_y = fmt.i_height - level - 4 + p_sys->i_pos_y;
         spu_txt->p_text = text_segment_New(text[i]);
         spu_txt->p_text->style = text_style_Duplicate(style);
+        SubAlignText(spu_txt, p_sys->i_pos, i_bargraph_width, i_bargraph_height, i_font_width, i_font_height);
+
         p_current_region->p_next = spu_txt;
         p_current_region = spu_txt;
     }
@@ -579,6 +618,7 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
         spu_txt->i_y = p_BarGraph->barHeight + 20 + p_sys->i_pos_y;
         spu_txt->p_text = text_segment_New(txt);
         spu_txt->p_text->style = text_style_Duplicate(style);
+        SubAlignText(spu_txt, p_sys->i_pos, i_bargraph_width, i_bargraph_height,  i_font_width, i_font_height);
 
         p_current_region->p_next = spu_txt;
         p_current_region = spu_txt;
