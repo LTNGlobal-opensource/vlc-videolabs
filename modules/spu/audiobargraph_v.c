@@ -560,8 +560,8 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
     {
         int level = iec_scale(-(i+1) * 10) * p_BarGraph->barHeight + 20;
         subpicture_region_t* spu_txt = subpicture_region_New(&fmt);
-        spu_txt->i_x = 0;
-        spu_txt->i_y = fmt.i_height - level - 4;
+        spu_txt->i_x = p_sys->i_pos_x;
+        spu_txt->i_y = fmt.i_height - level - 4 + p_sys->i_pos_y;
         spu_txt->p_text = text_segment_New(text[i]);
         spu_txt->p_text->style = text_style_Duplicate(style);
         p_current_region->p_next = spu_txt;
@@ -575,8 +575,8 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
         bargraph_data_t* p_stream =  p_BarGraph->p_data->p_streams[i_stream];
         const char* txt = p_stream->psz_stream_name;
         subpicture_region_t* spu_txt = subpicture_region_New(&fmt);
-        spu_txt->i_x = i_x;
-        spu_txt->i_y = p_BarGraph->barHeight + 20;
+        spu_txt->i_x = i_x + p_sys->i_pos_x;
+        spu_txt->i_y = p_BarGraph->barHeight + 20 + p_sys->i_pos_y;
         spu_txt->p_text = text_segment_New(txt);
         spu_txt->p_text->style = text_style_Duplicate(style);
 
