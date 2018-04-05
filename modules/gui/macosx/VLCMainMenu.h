@@ -108,6 +108,7 @@
 @property (readwrite, weak) IBOutlet NSMenuItem *vol_down;
 @property (readwrite, weak) IBOutlet NSMenuItem *mute;
 @property (readwrite, weak) IBOutlet NSMenuItem *audiotrack;
+@property (readwrite, weak) IBOutlet NSMenuItem *bargraph;
 @property (readwrite, weak) IBOutlet NSMenu *audiotrackMenu;
 @property (readwrite, weak) IBOutlet NSMenuItem *channels;
 @property (readwrite, weak) IBOutlet NSMenu *channelsMenu;
@@ -245,6 +246,7 @@
 - (IBAction)volumeUp:(id)sender;
 - (IBAction)volumeDown:(id)sender;
 - (IBAction)mute:(id)sender;
+- (IBAction)toggleBargraph:(id)sender;
 
 - (IBAction)goToSpecificTime:(id)sender;
 
