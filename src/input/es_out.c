@@ -3476,8 +3476,14 @@ static void EsOutUpdateInfo( es_out_t *out, es_out_id_t *es, const es_format_t *
        if (es->p_dec)
        {
             switch ( es->p_dec->fmt_out.video.i_interlaced) {
-            case INTERLACED_INTERLACED:
+            case INTERLACED_INTERLACED_UNKNOWN:
                 info_category_AddInfo( p_cat, _("Interlaced"),  _("yes") );
+                break;
+            case INTERLACED_INTERLACED_TOP_FIRST:
+                info_category_AddInfo( p_cat, _("Interlaced"),  _("Top First") );
+                break;
+            case INTERLACED_INTERLACED_BOTTOM_FIRST:
+                info_category_AddInfo( p_cat, _("Interlaced"),  _("Bottom First") );
                 break;
             case INTERLACED_PROGRESSIVE:
                 info_category_AddInfo( p_cat, _("Interlaced"),  _("no") );
