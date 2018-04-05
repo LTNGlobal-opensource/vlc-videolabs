@@ -553,6 +553,17 @@ static int BossCallback(vlc_object_t *p_this, const char *psz_var,
     playlist_MuteToggle(pl_Get(p_intf));
 }
 
+- (void)toggleBargraph
+{
+    intf_thread_t *p_intf = getIntf();
+    if (!p_intf)
+        return;
+
+    playlist_t * p_playlist = pl_Get(p_intf);
+    bool b_bargraph_active = var_GetBool(p_playlist->obj.libvlc, "audiobargraph_v-active");
+    var_SetBool(p_playlist->obj.libvlc, "audiobargraph_v-active", !b_bargraph_active);
+}
+
 - (BOOL)mute
 {
     intf_thread_t *p_intf = getIntf();
