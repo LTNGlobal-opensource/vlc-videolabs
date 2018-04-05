@@ -60,6 +60,9 @@
 #define BARHEIGHT_TEXT N_("Bar Height in pixel")
 #define BARHEIGHT_LONGTEXT N_("Height in pixel of BarGraph to be displayed." )
 
+#define ACTIVE_TEXT N_( "Set whether the bargraph is displayed" )
+#define ACTIVE_LONGTEXT N_( "Set whether the bargraph is displayed" )
+
 #define CFG_PREFIX "audiobargraph_v-"
 
 static const int pi_pos_values[] = { 0, 1, 2, 4, 8, 5, 6, 9, 10 };
@@ -91,7 +94,7 @@ vlc_module_begin ()
     add_obsolete_integer(CFG_PREFIX "alarm")
     add_integer(CFG_PREFIX "barWidth", 30, BARWIDTH_TEXT, BARWIDTH_LONGTEXT, true)
     add_integer(CFG_PREFIX "barHeight", 300, BARHEIGHT_TEXT, BARHEIGHT_LONGTEXT, true)
-
+    add_bool(CFG_PREFIX "active", true, ACTIVE_TEXT, ACTIVE_LONGTEXT, true);
 vlc_module_end ()
 
 
@@ -132,6 +135,8 @@ typedef struct
     int barHeight;
     bool alarm;
     int barWidth;
+    int b_active;
+
 
 } BarGraph_t;
 
@@ -370,6 +375,8 @@ static int BarGraphCallback(vlc_object_t *p_this, char const *psz_var,
         p_BarGraph->barWidth = newval.i_int;
     } else if (!strcmp(psz_var, CFG_PREFIX "barHeight")) {
         p_BarGraph->barHeight = newval.i_int;
+    } else if (!strcmp(psz_var, CFG_PREFIX "active")) {
+        p_BarGraph->b_active = newval.b_bool;
     }
     p_sys->b_spu_update = true;
     vlc_mutex_unlock(&p_sys->lock);
@@ -415,16 +422,10 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
 
     vlc_mutex_lock(&p_sys->lock);
     /* Basic test:  b_spu_update occurs on a dynamic change */
-    if (!p_sys->b_spu_update || p_sys->p_BarGraph.p_data == NULL) {
+    if ( !p_sys->b_spu_update || p_sys->p_BarGraph.p_data == NULL ) {
         vlc_mutex_unlock(&p_sys->lock);
         return NULL;
     }
-
-    int i_bargraph_width;
-    int i_bargraph_height;
-    Draw(p_BarGraph, &i_bargraph_width, &i_bargraph_height);
-
-    p_pic = p_BarGraph->p_pic;
 
     /* Allocate the subpicture internal data. */
     p_spu = filter_NewSubpicture(p_filter);
@@ -436,8 +437,16 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
     p_spu->i_stop = 0;
     p_spu->b_ephemer = true;
 
+    if (!p_BarGraph->b_active)
+        goto exit;
+
+    int i_bargraph_width;
+    int i_bargraph_height;
+    Draw(p_BarGraph, &i_bargraph_width, &i_bargraph_height);
+    p_pic = p_BarGraph->p_pic;
+
     /* Send an empty subpicture to clear the display when needed */
-    if (!p_pic || !p_BarGraph->i_alpha)
+    if ( !p_pic || !p_BarGraph->i_alpha)
         goto exit;
 
     /* Create new SPU region */
@@ -555,6 +564,8 @@ static int OpenSub(vlc_object_t *p_this)
     p_BarGraph->i_alpha = VLC_CLIP(p_BarGraph->i_alpha, 0, 255);
     p_BarGraph->p_data = NULL;
     p_BarGraph->alarm = false;
+    p_BarGraph->b_active = true;
+
 
     p_BarGraph->barWidth = var_CreateGetInteger(p_filter, CFG_PREFIX "barWidth");
     p_BarGraph->barHeight = var_CreateGetInteger( p_filter, CFG_PREFIX "barHeight");
@@ -562,14 +573,19 @@ static int OpenSub(vlc_object_t *p_this)
     vlc_mutex_init(&p_sys->lock);
     var_Create(p_filter->obj.libvlc, CFG_PREFIX "alarm", VLC_VAR_BOOL);
     var_Create(p_filter->obj.libvlc, CFG_PREFIX "i_values", VLC_VAR_ADDRESS);
+    var_Create(p_filter->obj.libvlc, CFG_PREFIX "active", VLC_VAR_BOOL);
+    var_SetBool(p_filter->obj.libvlc, CFG_PREFIX "active", p_BarGraph->b_active);
 
     var_AddCallback(p_filter->obj.libvlc, CFG_PREFIX "alarm",
                     BarGraphCallback, p_sys);
     var_AddCallback(p_filter->obj.libvlc, CFG_PREFIX "i_values",
                     BarGraphCallback, p_sys);
+    var_AddCallback(p_filter->obj.libvlc, CFG_PREFIX "active",
+                    BarGraphCallback, p_sys);
 
     var_TriggerCallback(p_filter->obj.libvlc, CFG_PREFIX "alarm");
     var_TriggerCallback(p_filter->obj.libvlc, CFG_PREFIX "i_values");
+    var_TriggerCallback(p_filter->obj.libvlc, CFG_PREFIX "active");
 
     for (int i = 0; ppsz_filter_callbacks[i]; i++)
         var_AddCallback(p_filter, ppsz_filter_callbacks[i],
@@ -598,6 +614,7 @@ static void Close(vlc_object_t *p_this)
                     BarGraphCallback, p_sys);
     var_Destroy(p_filter->obj.libvlc, CFG_PREFIX "i_values");
     var_Destroy(p_filter->obj.libvlc, CFG_PREFIX "alarm");
+    var_Destroy(p_filter->obj.libvlc, CFG_PREFIX "active");
 
     if (p_sys->p_BarGraph.p_data)
         shared_bargraph_data_unref(p_sys->p_BarGraph.p_data);

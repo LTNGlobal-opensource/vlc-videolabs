@@ -99,6 +99,7 @@ public slots:
     void RendererMenuCountdown();
     void StopRendererScan();
     void RendererSelected( QAction * );
+    void toggleBargraphFilter();
 
 protected slots:
     void onRendererItemAdded( vlc_renderer_item_t* );
