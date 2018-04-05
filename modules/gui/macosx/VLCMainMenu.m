@@ -415,6 +415,7 @@
     [_vol_up setTitle: _NS("Increase Volume")];
     [_vol_down setTitle: _NS("Decrease Volume")];
     [_mute setTitle: _NS("Mute")];
+    [_bargraph setTitle: _NS("Toggle bargraph")];
     [_audiotrack setTitle: _NS("Audio Track")];
     [_audiotrackMenu setTitle: _NS("Audio Track")];
     [_channels setTitle: _NS("Stereo audio mode")];
@@ -784,6 +785,11 @@
 - (IBAction)mute:(id)sender
 {
     [[VLCCoreInteraction sharedInstance] toggleMute];
+}
+
+- (IBAction)toggleBargraph:(id)sender
+{
+    [[VLCCoreInteraction sharedInstance] toggleBargraph];
 }
 
 - (void)lockVideosAspectRatio:(id)sender
