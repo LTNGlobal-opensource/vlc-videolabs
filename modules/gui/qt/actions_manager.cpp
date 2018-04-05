@@ -42,6 +42,10 @@ ActionsManager::ActionsManager( intf_thread_t * _p_i )
     : p_intf( _p_i )
     , m_scanning( false )
 {
+    char *psz_filters = var_InheritString( THEPL, "sub-filter" );
+    if (psz_filters)
+        free( psz_filters );
+
     CONNECT( this, rendererItemAdded( vlc_renderer_item_t* ),
              this, onRendererItemAdded( vlc_renderer_item_t* ) );
     CONNECT( this, rendererItemRemoved( vlc_renderer_item_t* ),
@@ -204,6 +208,53 @@ void ActionsManager::toggleMuteAudio()
 void ActionsManager::AudioUp()
 {
     playlist_VolumeUp( THEPL, 1, NULL );
+}
+
+//#define BARGRAPH_FILTER_TYPE "sub-filter"
+//#define BARGRAPH_FILTER_NAME "audiobargraph_v"
+
+//#define BARGRAPH_FILTER_TYPE "video-filter"
+//#define BARGRAPH_FILTER_NAME "mirror"
+#define BARGRAPH_ACTIVE_OPTION "audiobargraph_v-active"
+
+void ActionsManager::toggleBargraphFilter()
+{
+    /*
+    char* psz_chain = var_GetNonEmptyString( THEPL, BARGRAPH_FILTER_TYPE );
+    msg_Err(THEPL, "ActionsManager::toggleBargraphFilter was %s", psz_chain);
+    QStringList list = QString(psz_chain).split( ':', QString::SplitBehavior::SkipEmptyParts );
+    if (std::find(list.begin(), list.end(), QString(BARGRAPH_FILTER_NAME)) != list.end() )
+        list.removeAll(BARGRAPH_FILTER_NAME);
+    else
+        list.append(BARGRAPH_FILTER_NAME);
+    free(psz_chain);
+
+    QString newchain = list.join( ":" );
+    msg_Err(THEPL, "ActionsManager::toggleBargraphFilter set to %s", qtu(newchain));
+
+    var_SetString(THEPL, BARGRAPH_FILTER_TYPE, qtu(newchain) );
+
+    QVector<vout_thread_t*> p_vouts = THEMIM->getVouts();
+    foreach( vout_thread_t *p_vout, p_vouts )
+    {
+        var_SetString( p_vout, BARGRAPH_FILTER_TYPE, qtu(newchain) );
+        vlc_object_release( p_vout );
+    }*/
+
+    bool b_bargraph_active = var_GetBool( THEPL->obj.libvlc, BARGRAPH_ACTIVE_OPTION );
+    var_SetBool( THEPL->obj.libvlc, BARGRAPH_ACTIVE_OPTION, !b_bargraph_active );
+    /*
+    vlc_value_t val;
+    val.b_bool = !b_bargraph_active;
+    QVector<vout_thread_t*> p_vouts = THEMIM->getVouts();
+    foreach( vout_thread_t *p_vout, p_vouts )
+    {
+        int i_type = var_Type( p_vout, BARGRAPH_ACTIVE_OPTION );
+        var_SetChecked(p_vout, BARGRAPH_ACTIVE_OPTION, i_type, val );
+        //var_SetBool( p_vout, BARGRAPH_ACTIVE_OPTION, !b_bargraph_active );
+        vlc_object_release( p_vout );
+    }
+    */
 }
 
 void ActionsManager::AudioDown()

@@ -602,6 +602,9 @@ static inline void VolumeEntries( intf_thread_t *p_intf, QMenu *current )
     action = current->addAction( QIcon( ":/toolbar/volume-muted.svg" ), qtr( "&Mute" ),
                 ActionsManager::getInstance( p_intf ), SLOT( toggleMuteAudio() ) );
     action->setData( VLCMenuBar::ACTION_STATIC );
+    action = current->addAction( QIcon( ":/toolbar/bargraph.svg" ), qtr( "&Toggle bargraph" ),
+                ActionsManager::getInstance( p_intf ), SLOT( toggleBargraphFilter() ) );
+    action->setData( VLCMenuBar::ACTION_STATIC );
 }
 
 /**
