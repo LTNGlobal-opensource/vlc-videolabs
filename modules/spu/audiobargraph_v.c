@@ -125,6 +125,9 @@ typedef struct
     int i_alpha;       /* -1 means use default alpha */
     shared_bargraph_data_t *p_data;
     picture_t *p_pic;
+    int i_picWidth;
+    int i_picHeight;
+
     mtime_t date;
     int barHeight;
     bool alarm;
@@ -213,19 +216,22 @@ static float iec_scale(float dB)
 
 /* Drawing */
 
-static const uint8_t bright_red[4]   = { 76, 85, 0xff, 0xff };
-static const uint8_t black[4] = { 0x00, 0x80, 0x80, 0xff };
-static const uint8_t white[4] = { 0xff, 0x80, 0x80, 0xff };
-static const uint8_t bright_green[4] = { 150, 44, 21, 0xff };
-static const uint8_t bright_yellow[4] = { 226, 1, 148, 0xff };
-static const uint8_t green[4] = { 74, 85, 74, 0xff };
-static const uint8_t yellow[4] = { 112, 64, 138, 0xff };
-static const uint8_t red[4] = { 37, 106, 191, 0xff };
+static const uint8_t bright_red[4]   = { 0xFF, 0x0, 0x0, 0xFF };
+static const uint8_t black[4] = { 0x0, 0x0, 0x0, 0xFF };
+static const uint8_t white[4] = { 0xff, 0xFF, 0xFF, 0xFF };
+static const uint8_t bright_green[4] = { 0x0, 0xFF, 0x0, 0xFF };
+static const uint8_t bright_yellow[4] = { 0xFF, 0xFF, 0x0, 0xFF };
+static const uint8_t green[4] = { 0x0, 0x80, 0x0, 0xFF };
+static const uint8_t yellow[4] = { 0x80, 0x80, 0x00, 0xFF };
+static const uint8_t red[4] = { 0x80, 0x0, 0x0, 0xFF };
 
 static inline void DrawHLine(plane_t *p, int line, int col, const uint8_t color[4], int w)
 {
-    for (int j = 0; j < 4; j++)
-        memset(&p[j].p_pixels[line * p[j].i_pitch + col], color[j], w);
+    assert(p[0].i_pixel_pitch == sizeof(int32_t));
+    size_t pos = line * p[0].i_pitch + col * sizeof(int32_t);
+    int32_t* p_data = (int32_t*)&(p[0].p_pixels[pos]);
+    for (int j = 0; j < w; j++)
+        p_data[j] = *(uint32_t*)(color);
 }
 
 static void Draw2VLines(plane_t *p, int barheight, int col, const uint8_t color[4])
@@ -259,9 +265,6 @@ static void Draw(BarGraph_t *b, int* pi_graph_width, int* pi_graph_height)
     for (int i = 0; i < 6; i++)
         level[i] = iec_scale(-(i+1) * 10) * barHeight + 20;
 
-    if (b->p_pic)
-        picture_Release(b->p_pic);
-
     vlc_mutex_lock(&p_values->mutex);
     int w = barWidth;
     for (int i_stream = 0; i_stream < p_values->i_streams; i_stream++ )
@@ -272,9 +275,15 @@ static void Draw(BarGraph_t *b, int* pi_graph_width, int* pi_graph_height)
     *pi_graph_width = w;
     *pi_graph_height = h;
 
-    b->p_pic = picture_New(VLC_FOURCC('Y','U','V','A'), w, h, 1, 1);
-    if (!b->p_pic)
-        goto end;
+    if ( b->i_picHeight != h && b->i_picWidth!= w )
+    {
+        if (b->p_pic)
+            picture_Release(b->p_pic);
+        b->p_pic = picture_New(VLC_FOURCC('R','G','B','A'), w, h, 1, 1);
+        if (!b->p_pic)
+            goto end;
+    }
+
     picture_t *p_pic = b->p_pic;
     plane_t *p = p_pic->p;
 
@@ -551,10 +560,11 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
 
     /* Create new SPU region */
     memset(&fmt, 0, sizeof(video_format_t));
-    fmt.i_chroma = VLC_CODEC_YUVA;
+    fmt.i_chroma = VLC_CODEC_RGBA;
     fmt.i_sar_num = fmt.i_sar_den = 1;
-    fmt.i_width = fmt.i_visible_width = p_pic->p[Y_PLANE].i_visible_pitch;
-    fmt.i_height = fmt.i_visible_height = p_pic->p[Y_PLANE].i_visible_lines;
+    fmt.i_width = fmt.i_visible_width = p_pic->p[0].i_visible_pitch / p_pic->p[0].i_pixel_pitch;
+    fmt.i_height = fmt.i_visible_height = p_pic->p[0].i_visible_lines;
+
     fmt.i_x_offset = fmt.i_y_offset = 0;
     p_region = subpicture_region_New(&fmt);
     if (!p_region) {
@@ -657,6 +667,8 @@ static int OpenSub(vlc_object_t *p_this)
     p_sys->i_pos_y = var_CreateGetInteger(p_filter, CFG_PREFIX "y");
     BarGraph_t *p_BarGraph = &p_sys->p_BarGraph;
     p_BarGraph->p_pic = NULL;
+    p_BarGraph->i_picWidth = 0;
+    p_BarGraph->i_picHeight = 0;
     p_BarGraph->i_alpha = var_CreateGetInteger(p_filter, CFG_PREFIX "transparency");
     p_BarGraph->i_alpha = VLC_CLIP(p_BarGraph->i_alpha, 0, 255);
     p_BarGraph->p_data = NULL;
