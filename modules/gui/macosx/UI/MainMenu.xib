@@ -21,6 +21,7 @@
                 <outlet property="audioeffects" destination="2124" id="DgB-nx-3MC"/>
                 <outlet property="audiotrack" destination="1507" id="QBA-Gs-81T"/>
                 <outlet property="audiotrackMenu" destination="1508" id="MK9-2Z-ZUe"/>
+                <outlet property="bargraph" destination="HsS-cE-E4e" id="ig5-CS-IEw"/>
                 <outlet property="bookmarks" destination="2395" id="haO-lc-jcQ"/>
                 <outlet property="bring_atf" destination="5" id="UGX-P8-6dH"/>
                 <outlet property="bwd" destination="5145" id="8oq-Rd-af5"/>
@@ -527,6 +528,12 @@
                             <menuItem title="Mute" keyEquivalent="M" id="1066">
                                 <connections>
                                     <action selector="mute:" target="-2" id="839-yU-5m4"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Toggle Bargraph" id="HsS-cE-E4e">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="toggleBargraph:" target="-2" id="yiJ-Cd-nw8"/>
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="1074">
