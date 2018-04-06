@@ -593,6 +593,8 @@ static void ActivateSets(decoder_t *p_dec,
         if(p_dec->fmt_out.i_extra == 0 && p_vps && p_pps)
             SetsToAnnexB(p_sys, p_pps, p_sps, p_vps,
                          (uint8_t **)&p_dec->fmt_out.p_extra, &p_dec->fmt_out.i_extra);
+
+        p_dec->fmt_out.video.i_interlaced = hevc_frame_is_progressive(p_sps, NULL) ? INTERLACED_PROGRESSIVE : INTERLACED_INTERLACED_UNKNOWN;
     }
 }
 
