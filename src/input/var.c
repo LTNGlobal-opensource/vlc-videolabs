@@ -165,6 +165,11 @@ void input_ControlVarInit ( input_thread_t *p_input )
     text.psz_string = _("Programs");
     var_Change( p_input, "programs", VLC_VAR_SETTEXT, &text, NULL );
 
+    /* Programs */
+    var_Create( p_input, "slave-sout", VLC_VAR_STRING | VLC_VAR_DOINHERIT );
+    text.psz_string = _("Slave stream");
+    var_Change( p_input, "slave-sout", VLC_VAR_SETTEXT, &text, NULL );
+
     /* Title */
     var_Create( p_input, "title", VLC_VAR_INTEGER );
     text.psz_string = _("Title");

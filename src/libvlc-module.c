@@ -574,6 +574,10 @@ static const char *const ppsz_clock_descriptions[] =
     "Only use this option if you want to read a multi-program stream " \
     "(like DVB streams for example)." )
 
+#define INPUT_SLAVE_SOUT_TEXT N_("Slave Stream output")
+#define INPUT_SLAVE_SOUT_LONGTEXT N_( \
+    "define a stream output that will be run aside the playback" )
+
 /// \todo Document how to find it
 #define INPUT_AUDIOTRACK_TEXT N_("Audio track")
 #define INPUT_AUDIOTRACK_LONGTEXT N_( \
@@ -1716,6 +1720,9 @@ vlc_module_begin ()
         change_safe ()
     add_string( "programs", "",
                 INPUT_PROGRAMS_TEXT, INPUT_PROGRAMS_LONGTEXT, true )
+        change_safe ()
+    add_string( "slave-sout", "",
+             INPUT_SLAVE_SOUT_TEXT, INPUT_SLAVE_SOUT_LONGTEXT, true )
         change_safe ()
     add_integer( "audio-track", -1,
                  INPUT_AUDIOTRACK_TEXT, INPUT_AUDIOTRACK_LONGTEXT, true )
