@@ -24,6 +24,7 @@ libstream_out_transcode_plugin_la_SOURCES = \
 	stream_out/transcode/audio.c stream_out/transcode/video.c
 libstream_out_transcode_plugin_la_CFLAGS = $(AM_CFLAGS)
 libstream_out_transcode_plugin_la_LIBADD = $(LIBM)
+libstream_out_bargraph_plugin_la_SOURCES = stream_out/bargraph.c
 
 sout_LTLIBRARIES = \
 	libstream_out_dummy_plugin.la \
@@ -42,7 +43,8 @@ sout_LTLIBRARIES = \
 	libstream_out_record_plugin.la \
 	libstream_out_smem_plugin.la \
 	libstream_out_setid_plugin.la \
-	libstream_out_transcode_plugin.la
+	libstream_out_transcode_plugin.la \
+	libstream_out_bargraph_plugin.la
 
 # RTP plugin
 sout_LTLIBRARIES += libstream_out_rtp_plugin.la
