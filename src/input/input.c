@@ -1260,26 +1260,38 @@ static void InitPrograms( input_thread_t * p_input )
 
     /* Set up es_out */
     i_es_out_mode = ES_OUT_MODE_AUTO;
-    if( input_priv(p_input)->p_sout && !input_priv(p_input)->p_renderer )
+    char *slave_sout = var_GetNonEmptyString( p_input, "slave-sout" );
+    char *prgms;
+    if ( slave_sout )
     {
-        char *prgms;
+        i_es_out_mode = ES_OUT_MODE_SLAVE_SOUT;
 
-        if( (prgms = var_GetNonEmptyString( p_input, "programs" )) != NULL )
+    }
+    else if( (prgms = var_GetNonEmptyString( p_input, "programs" )) != NULL
+             || input_priv(p_input)->p_sout )
+    {
+        if( prgms  )
         {
             char *buf;
-
-            TAB_INIT( list.i_count, list.p_values );
-            for( const char *prgm = strtok_r( prgms, ",", &buf );
-                 prgm != NULL;
-                 prgm = strtok_r( NULL, ",", &buf ) )
+            if( strcmp( prgms, "all" ) == 0 )
             {
-                vlc_value_t val = { .i_int = atoi( prgm ) };
-                TAB_APPEND(list.i_count, list.p_values, val);
+                i_es_out_mode = ES_OUT_MODE_ALL;
             }
+            else
+            {
+                TAB_INIT( list.i_count, list.p_values );
+                for( const char *prgm = strtok_r( prgms, ",", &buf );
+                     prgm != NULL;
+                     prgm = strtok_r( NULL, ",", &buf ) )
+                {
+                    vlc_value_t val = { .i_int = atoi( prgm ) };
+                    TAB_APPEND(list.i_count, list.p_values, val);
+                }
 
-            if( list.i_count > 0 )
-                i_es_out_mode = ES_OUT_MODE_PARTIAL;
-                /* Note : we should remove the "program" callback. */
+                if( list.i_count > 0 )
+                    i_es_out_mode = ES_OUT_MODE_PARTIAL;
+                    /* Note : we should remove the "program" callback. */
+            }
 
             free( prgms );
         }
