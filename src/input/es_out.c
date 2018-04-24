@@ -3501,6 +3501,32 @@ static void EsOutUpdateInfo( es_out_t *out, es_out_id_t *es, const es_format_t *
             default:
                 break;
             }
+#define AFD_FORMAT(id, format) \
+    case id:\
+       info_category_AddInfo( p_cat, _("Active Format Description"),  _(format) ); \
+    break
+            if ( fmt->video.b_afdpresent )
+                switch ( fmt->video.i_afd ) {
+                AFD_FORMAT(0x0, "[0000] Unknown");
+                AFD_FORMAT(0x2, "[0010] 16:9 (top)");
+                AFD_FORMAT(0x3, "[0011] 14:9 (top)");
+                AFD_FORMAT(0x4, "[0100] > 16:9 (centre)");
+                AFD_FORMAT(0x8, "[1000] As the coded frame");
+                AFD_FORMAT(0x9, "[1001] 4:3 (centre)");
+                AFD_FORMAT(0xA, "[1010] 16:9 (centre)");
+                AFD_FORMAT(0xB, "[1011] 14:9 (top)");
+                AFD_FORMAT(0xD, "[1101] 4:3 (with shoot and protect 14:9 centre)");
+                AFD_FORMAT(0xE, "[1110] 16:9 (with shoot and protect 14:9 centre)");
+                AFD_FORMAT(0xF, "[1111] 16:9 (with shoot and protect  4:3 centre)");
+                default:
+                    info_category_AddInfo( p_cat, _("AFD"),  _("[%c%c%c%c] Reserved"),
+                                           (es->p_dec->fmt_out.video.i_afd & 8) ? '1' : '0',
+                                           (es->p_dec->fmt_out.video.i_afd & 4) ? '1' : '0',
+                                           (es->p_dec->fmt_out.video.i_afd & 2) ? '1' : '0',
+                                           (es->p_dec->fmt_out.video.i_afd & 1) ? '1' : '0');
+                    break;
+                }
+#undef AFD_FORMAT
        }
        break;
 
