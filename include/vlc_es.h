@@ -380,6 +380,7 @@ struct video_format_t
     } lighting;
     uint32_t i_cubemap_padding; /**< padding in pixels of the cube map faces */
     video_interlaced_format_t i_interlaced;
+    uint8_t i_afd;
 };
 
 /**

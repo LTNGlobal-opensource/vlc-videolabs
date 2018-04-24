@@ -3491,6 +3491,27 @@ static void EsOutUpdateInfo( es_out_t *out, es_out_id_t *es, const es_format_t *
             default:
                 break;
             }
+#define AFD_FORMAT(id, format) \
+    case id:\
+       info_category_AddInfo( p_cat, _("AFD"),  _(format) ); \
+    break
+            switch ( fmt->video.i_afd) {
+            AFD_FORMAT(0x0, "Unknowned");
+            AFD_FORMAT(0x2, "16:9 (top)");
+            AFD_FORMAT(0x3, "14:9 (top)");
+            AFD_FORMAT(0x4, "> 16:9 (centre)");
+            AFD_FORMAT(0x8, "As the coded frame");
+            AFD_FORMAT(0x9, "4:3 (centre)");
+            AFD_FORMAT(0xA, "16:9 (centre)");
+            AFD_FORMAT(0xB, "14:9 (top)");
+            AFD_FORMAT(0xD, "4:3 (with shoot and protect 14:9 centre)");
+            AFD_FORMAT(0xE, "16:9 (with shoot and protect 14:9 centre)");
+            AFD_FORMAT(0xF, "16:9 (with shoot and protect  4:3 centre)");
+            default:
+                info_category_AddInfo( p_cat, _("AFD"),  _("reserved %x"), es->p_dec->fmt_out.video.i_afd );
+                break;
+            }
+#undef AFD_FORMAT
        }
        break;
 
