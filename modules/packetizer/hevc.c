@@ -72,6 +72,7 @@ static block_t *ParseNALBlock(decoder_t *, bool *pb_ts_used, block_t *);
 static int PacketizeValidate(void *p_private, block_t *);
 static bool ParseSEICallback( const hxxx_sei_data_t *, void * );
 static block_t *GetCc( decoder_t *, decoder_cc_desc_t * );
+static vlc_ancillary_t *GetVanc( decoder_t *p_dec, int *p_mask );
 
 struct decoder_sys_t
 {
@@ -106,6 +107,7 @@ struct decoder_sys_t
 
     /* */
     cc_storage_t *p_ccs;
+    vlc_ancillary_t *p_vanc;
 };
 
 #define BLOCK_FLAG_DROP (1 << BLOCK_FLAG_PRIVATE_SHIFT)
@@ -285,6 +287,9 @@ static void Close(vlc_object_t *p_this)
 
     cc_storage_delete( p_sys->p_ccs );
 
+    if( p_sys->p_vanc )
+        vlc_ancillary_StorageDelete( p_sys->p_vanc );
+
     free(p_sys);
 }
 
@@ -319,6 +324,17 @@ static void PacketizeFlush( decoder_t *p_dec )
 static block_t *GetCc( decoder_t *p_dec, decoder_cc_desc_t *p_desc )
 {
     return cc_storage_get_current( p_dec->p_sys->p_ccs, p_desc );
+}
+
+/*****************************************************************************
+ * GetVanc:
+ *****************************************************************************/
+static vlc_ancillary_t *GetVanc( decoder_t *p_dec, int *p_mask )
+{
+    VLC_UNUSED( p_mask );
+    vlc_ancillary_t *p_anc = p_dec->p_sys->p_vanc;
+    p_dec->p_sys->p_vanc = NULL;
+    return p_anc;
 }
 
 /****************************************************************************
@@ -949,6 +965,18 @@ static bool ParseSEICallback( const hxxx_sei_data_t *p_sei_data, void *cbdata )
                 cc_storage_append( p_sys->p_ccs, true, p_sei_data->itu_t35.u.cc.p_data,
                                                        p_sei_data->itu_t35.u.cc.i_data );
             }
+            else if( p_sei_data->itu_t35.type == HXXX_ITU_T35_TYPE_AFD )
+            {
+                vlc_ancillary_t *p_anc = vlc_ancillary_New( ANCILLARY_AFD );
+                if( p_anc )
+                {
+                    p_anc->afd.val = p_sei_data->itu_t35.u.afd;
+                    vlc_ancillary_StorageAppend( &p_sys->p_vanc, p_anc );
+                    p_dec->fmt_out.video.b_afdpresent = p_anc->afd.val != -1;
+                    p_dec->fmt_out.video.i_afd = p_anc->afd.val;
+                }
+            }
+
         } break;
         case HXXX_SEI_FRAME_PACKING_ARRANGEMENT:
         {
