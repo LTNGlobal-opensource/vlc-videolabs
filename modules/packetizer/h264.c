@@ -1183,6 +1183,7 @@ static bool ParseSeiCallback( const hxxx_sei_data_t *p_sei_data, void *cbdata )
                 {
                     p_anc->afd.val = p_sei_data->itu_t35.u.afd;
                     vlc_ancillary_StorageAppend( &p_sys->p_vanc, p_anc );
+                    p_dec->fmt_out.video.i_afd = p_anc->afd.val;
                 }
             }
         } break;

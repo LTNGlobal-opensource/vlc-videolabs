@@ -541,9 +541,9 @@ static int vout_update_format( decoder_t *p_dec )
             return -1;
         }
 
-        vlc_mutex_lock( &p_owner->lock );
-        p_owner->ancillaries.vout_requested_mask = vout_GetSupportedAncillaries( p_vout );
-        vlc_mutex_unlock( &p_owner->lock );
+        //vlc_mutex_lock( &p_owner->lock );
+        //p_owner->ancillaries.vout_requested_mask = vout_GetSupportedAncillaries( p_vout );
+        //vlc_mutex_unlock( &p_owner->lock );
     }
 
     if ( memcmp( &p_dec->fmt_out.video.mastering,
