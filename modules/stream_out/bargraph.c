@@ -314,35 +314,57 @@ static int  decoder_queue_audio( decoder_t * p_dec, block_t * bloc)
     float f_value[AOUT_CHAN_MAX];
     memset(f_value, 0, sizeof(f_value));
 
+#define MAX_CHANNELS_AS_TYPE(type, i_value)                 \
+    do {                                                    \
+        memset(i_value, 0, sizeof(i_value));                \
+        type *p_sample = (type *)bloc->p_buffer;            \
+        for (unsigned i = 0; i < bloc->i_nb_samples; i++)   \
+            for (int j = 0; j < nbChannels; j++) {          \
+                type ch = *p_sample++;                      \
+                if (ch > i_value[j])                        \
+                    i_value[j] = ch;                        \
+            }                                               \
+    } while(0)
+
     if (p_dec->fmt_out.i_codec == VLC_CODEC_F32L)
     {
-        float *p_sample = (float *)bloc->p_buffer;
-        for (size_t i = 0; i < bloc->i_nb_samples; i++)
-            for (int j = 0; j<nbChannels; j++) {
-                float ch = *p_sample++;
-                if (ch > f_value[j])
-                    f_value[j] = ch;
-            }
+        MAX_CHANNELS_AS_TYPE(float, f_value);
     }
-    else if (p_dec->fmt_out.i_codec == VLC_CODEC_S32L)
+    else if (p_dec->fmt_out.i_codec == VLC_CODEC_F64L)
     {
-        int32_t i_value[AOUT_CHAN_MAX];
-        memset(i_value, 0, sizeof(i_value));
-
-        int32_t *p_sample = (int32_t *)bloc->p_buffer;
-        for (size_t i = 0; i < bloc->i_nb_samples; i++)
-            for (int j = 0; j<nbChannels; j++) {
-                int32_t ch = *p_sample++;
-                if (ch > i_value[j])
-                    i_value[j] = ch;
-            }
+        double d_value[AOUT_CHAN_MAX];
+        MAX_CHANNELS_AS_TYPE(double, d_value);
         for (int i = 0; i < nbChannels; i++)
-            f_value[i] = (float)i_value[i] / 2147483648.f;
+            f_value[i] = (float)d_value[i];
+    }
+    else if (p_dec->fmt_out.i_codec == VLC_CODEC_S32N)
+    {
+        int32_t d_value[AOUT_CHAN_MAX];
+        MAX_CHANNELS_AS_TYPE(int32_t, d_value);
+        for (int i = 0; i < nbChannels; i++)
+            f_value[i] = (float)d_value[i] / 2147483648.f;
+    }
+    else if (p_dec->fmt_out.i_codec == VLC_CODEC_S16N)
+    {
+        int16_t i_value[AOUT_CHAN_MAX];
+        MAX_CHANNELS_AS_TYPE(int16_t, i_value);
+        for (int i = 0; i < nbChannels; i++)
+            f_value[i] = (float)i_value[i] / 32768.f;
+    }
+    else if (p_dec->fmt_out.i_codec == VLC_CODEC_U8)
+    {
+        uint8_t i_value[AOUT_CHAN_MAX];
+        MAX_CHANNELS_AS_TYPE(uint8_t, i_value);
+        for (int i = 0; i < nbChannels; i++)
+            f_value[i] = (float)(i_value[i] - 128) / 128.f;
     }
     else
     {
         msg_Err(p_dec, "unsupported audio format %.4s", (char*)&p_dec->fmt_out.i_codec);
     }
+
+#undef SUM_CHANNELS_AS_SIGNED_TYPE
+
     //send the values
     shared_bargraph_data_t* shared_data = id->p_sys->shared_data;
     bargraph_data_t* data = id->p_data;
