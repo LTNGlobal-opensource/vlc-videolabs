@@ -874,6 +874,17 @@ static block_t *ParseMPEGBlock( decoder_t *p_dec, block_t *p_frag )
             }
             p_dec->fmt_out.video.multiview_mode = mode;
         }
+        else if ( !memcmp( &p_frag->p_buffer[4], "DTG1", 4 )
+                  && p_frag->i_buffer >= 9 )
+        {
+            if (p_frag->p_buffer[8] == 0x41) //0b01000001 active_format_flag
+            {
+                p_dec->fmt_out.video.b_afdpresent = true;
+                p_dec->fmt_out.video.i_afd = p_frag->p_buffer[9] & 0x0F;
+            }
+            else
+                p_dec->fmt_out.video.b_afdpresent = false;
+        }
         else
         cc_ProbeAndExtract( &p_sys->cc, p_sys->i_top_field_first,
                     &p_frag->p_buffer[4], p_frag->i_buffer - 4 );
