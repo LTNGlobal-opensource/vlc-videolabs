@@ -3527,8 +3527,20 @@ static void EsOutUpdateInfo( es_out_t *out, es_out_id_t *es, const es_format_t *
                     break;
                 }
 #undef AFD_FORMAT
+            if ( fmt->video.bardata.b_present )
+            {
+                if ( fmt->video.bardata.i_end_of_top_bar != -1 )
+                    info_category_AddInfo( p_cat, _("End of top bar (px)"), "%i", fmt->video.bardata.i_end_of_top_bar );
+                if ( fmt->video.bardata.i_start_of_bottom_bar != -1 )
+                    info_category_AddInfo( p_cat, _("Start of bottom bar (px)"), "%i", fmt->video.bardata.i_start_of_bottom_bar );
+                if ( fmt->video.bardata.i_end_of_left_bar != -1 )
+                    info_category_AddInfo( p_cat, _("End of left bar (px)"), "%i", fmt->video.bardata.i_end_of_left_bar );
+                if ( fmt->video.bardata.i_start_of_right_bar != -1 )
+                    info_category_AddInfo( p_cat, _("Start of right bar (px)"), "%i", fmt->video.bardata.i_start_of_right_bar );
+            }
        }
        break;
+
 
     case SPU_ES:
         info_category_AddInfo( p_cat, _("Type"), _("Subtitle") );

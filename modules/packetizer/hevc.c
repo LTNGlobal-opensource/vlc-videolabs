@@ -976,6 +976,14 @@ static bool ParseSEICallback( const hxxx_sei_data_t *p_sei_data, void *cbdata )
                     p_dec->fmt_out.video.i_afd = p_anc->afd.val;
                 }
             }
+            else if ( p_sei_data->itu_t35.type == HXXX_ITU_T35_TYPE_BARDATA )
+            {
+                p_dec->fmt_out.video.bardata.b_present = true;
+                p_dec->fmt_out.video.bardata.i_end_of_top_bar = p_sei_data->itu_t35.u.bardata.i_end_of_top_bar;
+                p_dec->fmt_out.video.bardata.i_start_of_bottom_bar = p_sei_data->itu_t35.u.bardata.i_start_of_bottom_bar;
+                p_dec->fmt_out.video.bardata.i_end_of_left_bar = p_sei_data->itu_t35.u.bardata.i_end_of_left_bar;
+                p_dec->fmt_out.video.bardata.i_start_of_right_bar = p_sei_data->itu_t35.u.bardata.i_start_of_right_bar;
+            }
 
         } break;
         case HXXX_SEI_FRAME_PACKING_ARRANGEMENT:
