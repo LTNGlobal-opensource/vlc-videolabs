@@ -328,6 +328,7 @@ static int lavc_UpdateVideoFormat(decoder_t *dec, AVCodecContext *ctx,
     dec->fmt_out.video.multiview_mode = dec->fmt_in.video.multiview_mode;
     dec->fmt_out.video.b_afdpresent = dec->fmt_in.video.b_afdpresent;
     dec->fmt_out.video.i_afd = dec->fmt_in.video.i_afd;
+    dec->fmt_out.video.bardata = dec->fmt_in.video.bardata;
     dec->fmt_out.video.pose = dec->fmt_in.video.pose;
     if ( dec->fmt_in.video.mastering.max_luminance )
         dec->fmt_out.video.mastering = dec->fmt_in.video.mastering;

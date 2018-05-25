@@ -885,6 +885,51 @@ static block_t *ParseMPEGBlock( decoder_t *p_dec, block_t *p_frag )
             else
                 p_dec->fmt_out.video.b_afdpresent = false;
         }
+        else if ( !memcmp( &p_frag->p_buffer[4], "GA94", 4 )
+                  && p_frag->i_buffer >= 9 )
+        {
+            if ( p_frag->p_buffer[8] == 0x06 )
+            {
+                p_dec->fmt_out.video.bardata.b_present = true;
+
+                uint8_t barflags = p_frag->p_buffer[9] >> 4; //4 reserved bytes
+                int16_t* p_bardata = (int16_t*)&p_frag->p_buffer[10];
+                if (barflags & 8)
+                {
+                    p_dec->fmt_out.video.bardata.i_end_of_top_bar =
+                            (int16_t)(ntoh16( *p_bardata ) & 0x3FFF);
+                    p_bardata++;
+                }
+                else
+                    p_dec->fmt_out.video.bardata.i_end_of_top_bar = -1;
+                if (barflags & 4)
+                {
+                    p_dec->fmt_out.video.bardata.i_start_of_bottom_bar =
+                            (int16_t)(ntoh16( *p_bardata ) & 0x3FFF);
+                    p_bardata++;
+                }
+                else
+                    p_dec->fmt_out.video.bardata.i_start_of_bottom_bar = -1;
+                if (barflags & 2)
+                {
+                    p_dec->fmt_out.video.bardata.i_end_of_left_bar =
+                            (int16_t)(ntoh16( *p_bardata ) & 0x3FFF);
+                    p_bardata++;
+                }
+                else
+                    p_dec->fmt_out.video.bardata.i_end_of_left_bar = -1;
+                if (barflags & 1)
+                {
+                    p_dec->fmt_out.video.bardata.i_start_of_right_bar =
+                            (int16_t)(ntoh16( *p_bardata ) & 0x3FFF);
+                    p_bardata++;
+                }
+                else
+                    p_dec->fmt_out.video.bardata.i_start_of_right_bar = -1;
+
+            }
+            // GA94 cc are handeled in cc_ProbeAndExtract
+        }
         else
         cc_ProbeAndExtract( &p_sys->cc, p_sys->i_top_field_first,
                     &p_frag->p_buffer[4], p_frag->i_buffer - 4 );
