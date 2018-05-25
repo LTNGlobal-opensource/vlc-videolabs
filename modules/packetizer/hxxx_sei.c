@@ -116,6 +116,45 @@ void HxxxParseSEI(const uint8_t *p_buf, size_t i_buf,
                                     sei_data.itu_t35.u.cc.p_data = &p_t35[8];
                                     b_continue = pf_callback( &sei_data, cbdata );
                                 }
+                                else if ( p_t35[7] == 0x06 )
+                                {
+                                    sei_data.itu_t35.type = HXXX_ITU_T35_TYPE_BARDATA;
+                                    uint8_t barflags = p_t35[8] >> 4; //4 reserved bytes
+                                    int16_t* p_bardata = (int16_t*)&p_t35[9];
+                                    if (barflags & 8)
+                                    {
+                                        sei_data.itu_t35.u.bardata.i_end_of_top_bar =
+                                                (int16_t)(ntoh16( *p_bardata ) & 0x3FFF);
+                                        p_bardata++;
+                                    }
+                                    else
+                                        sei_data.itu_t35.u.bardata.i_end_of_top_bar = -1;
+                                    if (barflags & 4)
+                                    {
+                                        sei_data.itu_t35.u.bardata.i_start_of_bottom_bar =
+                                                (int16_t)(ntoh16( *p_bardata ) & 0x3FFF);
+                                        p_bardata++;
+                                    }
+                                    else
+                                        sei_data.itu_t35.u.bardata.i_start_of_bottom_bar = -1;
+                                    if (barflags & 2)
+                                    {
+                                        sei_data.itu_t35.u.bardata.i_end_of_left_bar =
+                                                (int16_t)(ntoh16( *p_bardata ) & 0x3FFF);
+                                        p_bardata++;
+                                    }
+                                    else
+                                        sei_data.itu_t35.u.bardata.i_end_of_left_bar = -1;
+                                    if (barflags & 1)
+                                    {
+                                        sei_data.itu_t35.u.bardata.i_start_of_right_bar =
+                                                (int16_t)(ntoh16( *p_bardata ) & 0x3FFF);
+                                        p_bardata++;
+                                    }
+                                    else
+                                        sei_data.itu_t35.u.bardata.i_start_of_right_bar = -1;
+                                    b_continue = pf_callback( &sei_data, cbdata );
+                                }
                                 break;
                             case VLC_FOURCC('D', 'T', 'G', '1'):
                                 if( i_t35 == 9 )

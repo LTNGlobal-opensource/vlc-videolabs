@@ -382,6 +382,13 @@ struct video_format_t
     video_interlaced_format_t i_interlaced;
     bool b_afdpresent;
     uint8_t i_afd;
+    struct {
+        bool b_present;
+        int16_t i_end_of_top_bar;
+        int16_t i_start_of_bottom_bar;
+        int16_t i_end_of_left_bar;
+        int16_t i_start_of_right_bar;
+    } bardata;
 };
 
 /**
