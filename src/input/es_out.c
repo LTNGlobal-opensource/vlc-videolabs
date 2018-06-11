@@ -3487,16 +3487,22 @@ static void EsOutUpdateInfo( es_out_t *out, es_out_id_t *es, const es_format_t *
        {
             switch ( es->p_dec->fmt_out.video.i_interlaced) {
             case INTERLACED_INTERLACED_UNKNOWN:
-                info_category_AddInfo( p_cat, _("Interlaced"),  _("yes") );
+                info_category_AddInfo( p_cat, _("Field Order"), _("Interlaced Unknown") );
                 break;
             case INTERLACED_INTERLACED_TOP_FIRST:
-                info_category_AddInfo( p_cat, _("Interlaced"),  _("Top First") );
+                info_category_AddInfo( p_cat, _("Field Order"), _("Interlaced Top First") );
                 break;
             case INTERLACED_INTERLACED_BOTTOM_FIRST:
-                info_category_AddInfo( p_cat, _("Interlaced"),  _("Bottom First") );
+                info_category_AddInfo( p_cat, _("Field Order"), _("Interlaced Bottom First") );
+                break;
+            case INTERLACED_INTERLACED_TOP_BOTTOM_TOP:
+                info_category_AddInfo( p_cat, _("Field Order"), _("Interlaced Top Bottom Top") );
+                break;
+            case INTERLACED_INTERLACED_BOTTOM_TOP_BOTTOM:
+                info_category_AddInfo( p_cat, _("Field Order"), _("Interlaced Bottom Top Bottom") );
                 break;
             case INTERLACED_PROGRESSIVE:
-                info_category_AddInfo( p_cat, _("Interlaced"),  _("no") );
+                info_category_AddInfo( p_cat, _("Field Order"), _("Progressive") );
                 break;
             default:
                 break;

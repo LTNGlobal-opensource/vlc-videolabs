@@ -610,7 +610,7 @@ static void ActivateSets(decoder_t *p_dec,
             SetsToAnnexB(p_sys, p_pps, p_sps, p_vps,
                          (uint8_t **)&p_dec->fmt_out.p_extra, &p_dec->fmt_out.i_extra);
 
-        p_dec->fmt_out.video.i_interlaced = hevc_frame_is_progressive(p_sps, NULL) ? INTERLACED_PROGRESSIVE : INTERLACED_INTERLACED_UNKNOWN;
+        //p_dec->fmt_out.video.i_interlaced = hevc_frame_is_progressive(p_sps, NULL) ? INTERLACED_PROGRESSIVE : INTERLACED_INTERLACED_UNKNOWN;
     }
 }
 
@@ -956,6 +956,34 @@ static bool ParseSEICallback( const hxxx_sei_data_t *p_sei_data, void *cbdata )
                 hevc_release_sei_pic_timing( p_sys->p_timing );
                 p_sys->p_timing = hevc_decode_sei_pic_timing( p_sei_data->p_bs,
                                                               p_sys->p_active_sps );
+                switch ( hevc_get_frame_interlaced(p_sys->p_timing) ) {
+                case 0:
+                    p_dec->fmt_out.video.i_interlaced = INTERLACED_PROGRESSIVE;
+                    break;
+                case 1:
+                case 2:
+                case 9:
+                case 10:
+                case 11:
+                case 12:
+                    p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_UNKNOWN;
+                    break;
+                case 3:
+                    p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_TOP_FIRST;
+                    break;
+                case 4:
+                    p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_BOTTOM_FIRST;
+                    break;
+                case 5:
+                    p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_TOP_BOTTOM_TOP;
+                    break;
+                case 6:
+                    p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_BOTTOM_TOP_BOTTOM;
+                    break;
+                default:
+                    p_dec->fmt_out.video.i_interlaced = INTERLACED_UNKNOWN;
+                    break;
+                }
             }
         } break;
         case HXXX_SEI_USER_DATA_REGISTERED_ITU_T_T35:
