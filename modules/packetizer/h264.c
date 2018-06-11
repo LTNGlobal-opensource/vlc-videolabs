@@ -201,8 +201,8 @@ static void ActivateSets( decoder_t *p_dec, const h264_sequence_parameter_set_t 
     {
         p_dec->fmt_out.i_profile = p_sps->i_profile;
         p_dec->fmt_out.i_level = p_sps->i_level;
-        p_dec->fmt_out.video.i_interlaced =
-                (p_sps->frame_mbs_only_flag != 0) ? INTERLACED_PROGRESSIVE : INTERLACED_INTERLACED_UNKNOWN;
+        //p_dec->fmt_out.video.i_interlaced =
+        //        (p_sps->frame_mbs_only_flag != 0) ? INTERLACED_PROGRESSIVE : INTERLACED_INTERLACED_UNKNOWN;
 
         (void) h264_get_picture_size( p_sps, &p_dec->fmt_out.video.i_width,
                                       &p_dec->fmt_out.video.i_height,
@@ -1159,8 +1159,33 @@ static bool ParseSeiCallback( const hxxx_sei_data_t *p_sei_data, void *cbdata )
                             bs_read( p_sei_data->p_bs, p_sps->vui.i_dpb_output_delay_length_minus1 + 1 );
                 }
 
-                if( p_sps->vui.b_pic_struct_present_flag )
+                if( p_sps->vui.b_pic_struct_present_flag ) {
                     p_sys->i_pic_struct = bs_read( p_sei_data->p_bs, 4 );
+                    switch (p_sys->i_pic_struct) {
+                    case 0:
+                        p_dec->fmt_out.video.i_interlaced = INTERLACED_PROGRESSIVE;
+                        break;
+                    case 1:
+                    case 2:
+                        p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_UNKNOWN;
+                        break;
+                    case 3:
+                        p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_TOP_FIRST;
+                        break;
+                    case 4:
+                        p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_BOTTOM_FIRST;
+                        break;
+                    case 5:
+                        p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_TOP_BOTTOM_TOP;
+                        break;
+                    case 6:
+                        p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_BOTTOM_TOP_BOTTOM;
+                        break;
+                    default:
+                        p_dec->fmt_out.video.i_interlaced = INTERLACED_UNKNOWN;
+                        break;
+                    }
+                }
                 /* + unparsed remains */
             }
         } break;
