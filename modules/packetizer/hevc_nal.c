@@ -1602,6 +1602,11 @@ bool hevc_frame_is_progressive( const hevc_sequence_parameter_set_t *p_sps,
     return true;
 }
 
+uint8_t hevc_get_frame_interlaced( const hevc_sei_pic_timing_t *p_timing )
+{
+    return p_timing->pic_struct;
+}
+
 uint8_t hevc_get_num_clock_ts( const hevc_sequence_parameter_set_t *p_sps,
                                const hevc_sei_pic_timing_t *p_timing )
 {
