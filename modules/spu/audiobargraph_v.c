@@ -38,6 +38,7 @@
 #include <vlc_subpicture.h>
 #include <vlc_image.h>
 #include <vlc_memstream.h>
+#include <vlc_block.h>
 
 /*****************************************************************************
  * Module descriptor
@@ -106,11 +107,15 @@ vlc_module_end ()
  * Structure to hold the Bar Graph properties
  ****************************************************************************/
 
+typedef struct {
+    float channels_peaks[AOUT_CHAN_MAX];
+} peak_data_t;
+
 typedef struct  {
     char* psz_stream_name;
     int i_stream_id;
     int i_nb_channels;
-    float channels_peaks[AOUT_CHAN_MAX];
+    vlc_fifo_t* p_fifo;
 } bargraph_data_t;
 
 typedef struct {
@@ -151,6 +156,7 @@ static void shared_bargraph_data_unref( shared_bargraph_data_t* p_shared_data )
     {
         TAB_CLEAN( p_shared_data->i_streams, p_shared_data->p_streams );
         vlc_mutex_unlock(&p_shared_data->mutex);
+        vlc_mutex_destroy(&p_shared_data->mutex);
         free( p_shared_data );
     }
     else
@@ -251,10 +257,41 @@ static void DrawHLines(plane_t *p, int line, int col, const uint8_t color[4], in
         DrawHLine(p, i, col, color, w);
 }
 
+static void DrawBar(plane_t *p,
+                    int w, int h,
+                    int barWidth, int barHeight,
+                    float db
+                    )
+{
+    //const uint8_t *indicator_color = b->alarm ? bright_red : black;
+    const uint8_t *indicator_color = black;
+    int minus8  = iec_scale(- 8) * barHeight + 20;
+    int minus18 = iec_scale(-18) * barHeight + 20;
+
+    DrawHLines(p, h - 20 - 1, w, indicator_color, 8, barWidth);
+    for (int line = 20; line < db + 20; line++) {
+        if (line < minus18)
+            DrawHLines(p, h - line - 1, w, bright_green, 1, barWidth);
+        else if (line < minus8)
+            DrawHLines(p, h - line - 1, w, bright_yellow, 1, barWidth);
+        else
+            DrawHLines(p, h - line - 1, w, bright_red, 1, barWidth);
+    }
+
+    for (int line = db + 20; line < barHeight + 20; line++) {
+        if (line < minus18)
+            DrawHLines(p, h - line - 1, w, green, 1, barWidth);
+        else if (line < minus8)
+            DrawHLines(p, h - line - 1, w, yellow, 1, barWidth);
+        else
+            DrawHLines(p, h - line - 1, w, red, 1, barWidth);
+    }
+}
+
 /*****************************************************************************
  * Draw: creates and returns the bar graph image
  *****************************************************************************/
-static void Draw(BarGraph_t *b, int* pi_graph_width, int* pi_graph_height)
+static void Draw(BarGraph_t *b, int* pi_graph_width, int* pi_graph_height, mtime_t date)
 {
     assert(pi_graph_width != NULL);
     assert(pi_graph_height != NULL);
@@ -303,38 +340,48 @@ static void Draw(BarGraph_t *b, int* pi_graph_width, int* pi_graph_height)
         DrawHLines(p, h - 1 - level[i],     barWidth - 6, black, 2, 3);
     }
 
-    int minus8  = iec_scale(- 8) * barHeight + 20;
-    int minus18 = iec_scale(-18) * barHeight + 20;
-
-    const uint8_t *indicator_color = b->alarm ? bright_red : black;
-
     int pi = barWidth;
+
     for (int i_stream = 0; i_stream < p_values->i_streams; i_stream++ )
     {
         bargraph_data_t* p_data = p_values->p_streams[i_stream];
-        for (int i = 0; i < p_data->i_nb_channels; i++) {
-            DrawHLines(p, h - 20 - 1, pi, indicator_color, 8, barWidth);
-            float db = log10(p_data->channels_peaks[i]) * 20;
-            db = VLC_CLIP(iec_scale(db)*b->barHeight, 0, b->barHeight);
-
-            for (int line = 20; line < db + 20; line++) {
-                if (line < minus18)
-                    DrawHLines(p, h - line - 1, pi, bright_green, 1, barWidth);
-                else if (line < minus8)
-                    DrawHLines(p, h - line - 1, pi, bright_yellow, 1, barWidth);
-                else
-                    DrawHLines(p, h - line - 1, pi, bright_red, 1, barWidth);
+        //vlc_mutex_lock(&p_data->mutex);
+        block_t* block = NULL;
+        bool b_release_block = true;
+        while (!vlc_fifo_IsEmpty(p_data->p_fifo)) {
+            block_t* fifoheadblock = block_FifoShow(p_data->p_fifo);
+            if (fifoheadblock->i_pts > date)
+                break;
+            if ( block != NULL )
+                block_Release(block);
+            if (fifoheadblock->i_pts + fifoheadblock->i_length > date)
+            {
+                block = fifoheadblock;
+                b_release_block = false;
+                break;
             }
+            else
+                block = block_FifoGet( p_data->p_fifo );
+        }
 
-            for (int line = db + 20; line < barHeight + 20; line++) {
-                if (line < minus18)
-                    DrawHLines(p, h - line - 1, pi, green, 1, barWidth);
-                else if (line < minus8)
-                    DrawHLines(p, h - line - 1, pi, yellow, 1, barWidth);
-                else
-                    DrawHLines(p, h - line - 1, pi, red, 1, barWidth);
+        if (block)
+        {
+            peak_data_t* peaks = (peak_data_t*)block->p_buffer;
+            for (int i = 0; i < p_data->i_nb_channels; i++) {
+                float db = log10(peaks->channels_peaks[i]) * 20;
+                db = VLC_CLIP(iec_scale(db)* barHeight, 0, barHeight);
+                DrawBar(p, pi, h, barWidth, barHeight, db);
+                pi += 5 + barWidth;
             }
-            pi += 5 + barWidth;
+            if (b_release_block)
+                block_Release(block);
+        }
+        else
+        {
+            for (int i = 0; i < p_data->i_nb_channels; i++) {
+                DrawBar(p, pi, h, barWidth, barHeight, 0.f);
+                pi += 5 + barWidth;
+            }
         }
         pi += 5 + barWidth;
     }
@@ -363,12 +410,14 @@ static int BarGraphCallback(vlc_object_t *p_this, char const *psz_var,
         p_BarGraph->i_alpha = VLC_CLIP(newval.i_int, 0, 255);
     else if (!strcmp(psz_var, CFG_PREFIX "i_values")) {
         shared_bargraph_data_t* p_shared_bargraph =  (shared_bargraph_data_t*)newval.p_address;
-        if (!p_BarGraph->p_data && p_shared_bargraph)
-        {
+	if (p_BarGraph->p_data != p_shared_bargraph)
+	{
+	  if (p_BarGraph->p_data)
             shared_bargraph_data_unref(p_BarGraph->p_data);
-            shared_bargraph_data_ref(p_shared_bargraph);
-        }
-        p_BarGraph->p_data = p_shared_bargraph;
+	  if (p_shared_bargraph)
+	    shared_bargraph_data_ref(p_shared_bargraph);
+	  p_BarGraph->p_data = p_shared_bargraph;
+	}
     } else if (!strcmp(psz_var, CFG_PREFIX "alarm")) {
         p_BarGraph->alarm = newval.b_bool;
     } else if (!strcmp(psz_var, CFG_PREFIX "barWidth")) {
@@ -442,7 +491,7 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
 
     int i_bargraph_width;
     int i_bargraph_height;
-    Draw(p_BarGraph, &i_bargraph_width, &i_bargraph_height);
+    Draw(p_BarGraph, &i_bargraph_width, &i_bargraph_height, date);
     p_pic = p_BarGraph->p_pic;
 
     /* Send an empty subpicture to clear the display when needed */

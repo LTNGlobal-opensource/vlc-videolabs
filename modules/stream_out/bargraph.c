@@ -137,13 +137,15 @@ static char *LanguageGetName( const char *psz_code )
     }
 }
 
-
+typedef struct {
+    float channels_peaks[AOUT_CHAN_MAX];
+} peak_data_t;
 
 typedef struct  {
     char* psz_stream_name;
     int i_stream_id;
     int i_nb_channels;
-    float channels_peaks[AOUT_CHAN_MAX];
+    vlc_fifo_t* p_fifo;
 } bargraph_data_t;
 
 typedef struct {
@@ -219,6 +221,7 @@ static bargraph_data_t* shared_bargraph_data_add_stream(shared_bargraph_data_t* 
     if (!p_data)
         return NULL;
     bargraph_data_t* p_bargraph_data = calloc(1, sizeof(bargraph_data_t));
+    p_bargraph_data->p_fifo = block_FifoNew();
     p_bargraph_data->i_stream_id = p_fmt->i_id;
     p_bargraph_data->i_nb_channels = p_fmt->audio.i_channels;
     if (p_fmt->psz_language)
@@ -247,6 +250,7 @@ static void shared_bargraph_data_del_stream(shared_bargraph_data_t* p_data, barg
     vlc_mutex_unlock(&p_data->mutex);
     if (p_bargraph_data->psz_stream_name)
         free(p_bargraph_data->psz_stream_name);
+    block_FifoRelease(p_bargraph_data->p_fifo);
     free( p_bargraph_data );
 }
 
@@ -306,7 +310,7 @@ static inline int audio_update_format( decoder_t *p_dec )
     return ( p_dec->fmt_out.audio.i_bitspersample > 0 ) ? 0 : -1;
 }
 
-static int  decoder_queue_audio( decoder_t * p_dec, block_t * bloc)
+static int  decoder_queue_audio( decoder_t * p_dec, block_t * block_in)
 {
     sout_stream_id_sys_t *id = p_dec->p_queue_ctx;
 
@@ -317,8 +321,8 @@ static int  decoder_queue_audio( decoder_t * p_dec, block_t * bloc)
 #define MAX_CHANNELS_AS_TYPE(type, i_value)                 \
     do {                                                    \
         memset(i_value, 0, sizeof(i_value));                \
-        type *p_sample = (type *)bloc->p_buffer;            \
-        for (unsigned i = 0; i < bloc->i_nb_samples; i++)   \
+        type *p_sample = (type *)block_in->p_buffer;            \
+        for (unsigned i = 0; i < block_in->i_nb_samples; i++)   \
             for (int j = 0; j < nbChannels; j++) {          \
                 type ch = *p_sample++;                      \
                 if (ch > i_value[j])                        \
@@ -367,15 +371,27 @@ static int  decoder_queue_audio( decoder_t * p_dec, block_t * bloc)
 
     //send the values
     shared_bargraph_data_t* shared_data = id->p_sys->shared_data;
-    bargraph_data_t* data = id->p_data;
-
     vlc_mutex_lock(&shared_data->mutex);
-    memcpy(data->channels_peaks, f_value, nbChannels * sizeof(float));
+
+    bargraph_data_t* data = id->p_data;
+    block_t* block_out = block_Alloc(sizeof(peak_data_t));
+    block_CopyProperties(block_out, block_in);
+    memcpy(&((peak_data_t*)block_out->p_buffer)->channels_peaks, f_value, nbChannels * sizeof(float));
+    vlc_fifo_Lock(data->p_fifo);
+    //don't leak is nobody is consuming the fifo
+    if ( vlc_fifo_GetCount(data->p_fifo) > 100 )
+    {
+        msg_Dbg(p_dec, "Drop peak data");
+        block_t* block_tmp = vlc_fifo_DequeueUnlocked(data->p_fifo);
+        block_Release(block_tmp);
+    }
+    vlc_fifo_QueueUnlocked(data->p_fifo, block_out);
+    vlc_fifo_Unlock(data->p_fifo);
     vlc_mutex_unlock(&shared_data->mutex);
     var_SetAddress(p_dec->obj.libvlc, "audiobargraph_v-i_values", shared_data);
 
 
-    block_Release( bloc );
+    block_Release( block_in );
     return 0;
 }
 
