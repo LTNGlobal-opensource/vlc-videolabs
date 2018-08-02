@@ -884,6 +884,10 @@ static void Close(vlc_object_t *p_this)
     if (sys->delegate)
         sys->delegate->Release();
 
+#ifdef HAVE_KLVANC
+    klvanc_context_destroy(sys->vanc_ctx);
+#endif
+
     vlc_mutex_destroy(&sys->pts_lock);
     free(sys);
 }
