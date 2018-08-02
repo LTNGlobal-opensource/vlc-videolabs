@@ -142,6 +142,7 @@ struct demux_sys_t
     es_out_id_t **audio_es;
     int audio_es_count;
     es_out_id_t *cc_es[4];
+    es_out_id_t *cc708_es[6];
 
     vlc_mutex_t pts_lock;
     int last_pts;  /* protected by <pts_lock> */
@@ -369,6 +370,24 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
                         }
                         if (sys->cc_es[j])
                             es_out_Send(demux_->out, sys->cc_es[j], block_Duplicate(cc));
+                    }
+                    for (int j = 0; j < 6; j++)
+                    {
+                        if (!sys->cc708_es[j] && cdp_has_708(cc->p_buffer, cc->i_buffer))
+                        {
+                            es_format_t fmt;
+                            char buf[32];
+                            es_format_Init( &fmt, SPU_ES, VLC_CODEC_CEA708 );
+                            fmt.subs.cc.i_channel = j;
+                            snprintf(buf, sizeof(buf), "DTV Closed captions %d", j + 1);
+                            fmt.psz_description = strdup(buf);
+                            if (fmt.psz_description) {
+                                sys->cc708_es[j] = es_out_Add(demux_->out, &fmt);
+                                msg_Dbg(demux_, "Adding DTV Closed captions stream %d", j);
+                            }
+                        }
+                        if (sys->cc708_es[j])
+                            es_out_Send(demux_->out, sys->cc708_es[j], block_Duplicate(cc));
                     }
                     block_Release(cc);
 
