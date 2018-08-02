@@ -126,7 +126,7 @@ EXTRA_LTLIBRARIES += liblinsys_hdsdi_plugin.la liblinsys_sdi_plugin.la
 
 libdecklink_plugin_la_SOURCES = access/decklink.cpp access/sdi.c access/sdi.h
 libdecklink_plugin_la_CXXFLAGS = $(AM_CXXFLAGS) $(CPPFLAGS_decklink)
-libdecklink_plugin_la_LIBADD = $(LIBS_decklink) $(LIBDL) -lpthread
+libdecklink_plugin_la_LIBADD = $(LIBS_decklink) $(KLVANC_LIBS) $(LIBDL) -lpthread
 if HAVE_DECKLINK
 access_LTLIBRARIES += libdecklink_plugin.la
 endif

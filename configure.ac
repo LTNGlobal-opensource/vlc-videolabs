@@ -2935,6 +2935,23 @@ AS_IF( [test "${enable_libass}" != "no"], [
   ])
 
 dnl
+dnl VANC processing modules
+dnl
+AC_ARG_ENABLE(klvanc,
+  [  --enable-klvanc        Kernel Labs VANC library (default enabled)])
+AS_IF( [test "${enable_klvanc}" != "no" ],[
+  PKG_CHECK_MODULES(KLVANC, [libklvanc >= 1.0], [
+      have_klvanc="yes"
+      VLC_ADD_PLUGIN([klvanc])
+      AC_DEFINE(HAVE_KLVANC, 1, [Define if libklvanc is available.])
+    ],[
+      AC_MSG_WARN(Library [libklvanc] needed for [decklink] was not found)
+      have_aribb24="no"
+  ])
+])
+AM_CONDITIONAL([HAVE_KLVANC], [test x"${have_klvanc}" = x"yes"])
+
+dnl
 dnl ARIB subtitles rendering module
 dnl
 AC_ARG_ENABLE(aribsub,

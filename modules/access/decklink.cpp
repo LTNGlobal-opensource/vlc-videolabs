@@ -3,9 +3,11 @@
  *****************************************************************************
  * Copyright (C) 2010 Steinar H. Gunderson
  * Copyright (C) 2012-2014 Rafaël Carré
+ * Copyright (C) 2018 LTN Global Communications
  *
  * Authors: Steinar H. Gunderson <steinar+vlc@gunderson.no>
-            Rafaël Carré <funman@videolanorg>
+ *          Rafaël Carré <funman@videolanorg>
+ *          Devin Heitmueller <dheitmueller@ltnglobal.com>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by
@@ -33,6 +35,10 @@
 #include <vlc_decklink.h>
 
 #include <arpa/inet.h>
+
+#ifdef HAVE_KLVANC
+#include "libklvanc/vanc.h"
+#endif
 
 #include "sdi.h"
 
@@ -151,6 +157,11 @@ struct demux_sys_t
     int channels;
     int64_t audio_channels_supported;
 
+#ifdef HAVE_KLVANC
+    struct klvanc_context_s *vanc_ctx;
+    uint16_t cdp_sequence_num;
+#endif
+
     bool tenbits;
 };
 
@@ -222,6 +233,98 @@ static es_format_t GetModeSettings(demux_t *demux, IDeckLinkDisplayMode *m,
 
     return video_fmt;
 }
+
+#ifdef HAVE_KLVANC
+struct vanc_cb_ctx {
+    demux_t *demux;
+    BMDTimeValue stream_time;
+};
+
+static int cb_EIA_708B(void *callback_context, struct klvanc_context_s *ctx,
+                       struct klvanc_packet_eia_708b_s *pkt)
+{
+    struct vanc_cb_ctx *cb_ctx = (struct vanc_cb_ctx *)callback_context;
+    demux_t     *demux = cb_ctx->demux;
+    demux_sys_t *p_sys = (demux_sys_t *)demux->p_sys;
+    uint16_t expected_cdp;
+
+    if (!pkt->checksum_valid)
+        return 0;
+
+    if (!pkt->header.ccdata_present)
+        return 0;
+
+    expected_cdp = p_sys->cdp_sequence_num + 1;
+    p_sys->cdp_sequence_num = pkt->header.cdp_hdr_sequence_cntr;
+    if (pkt->header.cdp_hdr_sequence_cntr != expected_cdp) {
+        msg_Dbg(demux, "CDP counter inconsistent.  Received=0x%04x Expected=%04x\n",
+                pkt->header.cdp_hdr_sequence_cntr, expected_cdp);
+        return 0;
+    }
+    block_t *cc = block_Alloc(pkt->ccdata.cc_count * 3);
+    if (cc == NULL)
+        return 0;
+
+    /* Extract the CC triples from the CDP and load them into a array of values.
+       Note that VLC expects all CC data to be provided to all decoders, as opposed
+       to only providing the relevant bytes for a specific CC decoder instance. */
+    for (size_t i = 0; i < pkt->ccdata.cc_count; i++) {
+        cc->p_buffer[3*i+0] =  0xf8 | (pkt->ccdata.cc[i].cc_valid ? 0x04 : 0x00) |
+                  (pkt->ccdata.cc[i].cc_type & 0x03);
+        cc->p_buffer[3*i+1] = pkt->ccdata.cc[i].cc_data[0];
+        cc->p_buffer[3*i+2] = pkt->ccdata.cc[i].cc_data[1];
+    }
+
+    cc->i_pts = cc->i_dts = VLC_TS_0 + cb_ctx->stream_time;
+    for (int j = 0; j < 4; j++) {
+        if (!p_sys->cc_es[j] && cdp_has_608(cc->p_buffer, cc->i_buffer)) {
+            es_format_t fmt;
+            char buf[32];
+            es_format_Init( &fmt, SPU_ES, VLC_CODEC_CEA608 );
+            fmt.subs.cc.i_channel = j;
+            snprintf(buf, sizeof(buf), "Closed captions %d", j + 1);
+            fmt.psz_description = strdup(buf);
+            if (fmt.psz_description) {
+                p_sys->cc_es[j] = es_out_Add(demux->out, &fmt);
+                msg_Dbg(demux, "Adding Closed captions stream %d", j);
+            }
+        }
+        if (p_sys->cc_es[j])
+            es_out_Send(demux->out, p_sys->cc_es[j], block_Duplicate(cc));
+    }
+    for (int j = 0; j < 6; j++)
+    {
+        if (!p_sys->cc708_es[j] && cdp_has_708(cc->p_buffer, cc->i_buffer))
+        {
+            es_format_t fmt;
+            char buf[32];
+            es_format_Init( &fmt, SPU_ES, VLC_CODEC_CEA708 );
+            fmt.subs.cc.i_channel = j;
+            snprintf(buf, sizeof(buf), "DTV Closed captions %d", j + 1);
+            fmt.psz_description = strdup(buf);
+            if (fmt.psz_description) {
+                p_sys->cc708_es[j] = es_out_Add(demux->out, &fmt);
+                msg_Dbg(demux, "Adding DTV Closed captions stream %d", j);
+            }
+        }
+        if (p_sys->cc708_es[j])
+            es_out_Send(demux->out, p_sys->cc708_es[j], block_Duplicate(cc));
+    }
+    block_Release(cc);
+
+    return 0;
+}
+
+static struct klvanc_callbacks_s callbacks =
+{
+    NULL,
+    cb_EIA_708B,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+};
+#endif
 
 class DeckLinkCaptureDelegate : public IDeckLinkInputCallback
 {
@@ -339,62 +442,40 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
 
         if (sys->video_fmt.i_codec == VLC_CODEC_I422_10L) {
             v210_convert((uint16_t*)video_frame->p_buffer, frame_bytes, width, height);
+#ifdef HAVE_KLVANC
             IDeckLinkVideoFrameAncillary *vanc;
-            if (videoFrame->GetAncillaryData(&vanc) == S_OK) {
+            uint16_t decoded_words[16384];
+            if (sys->vanc_ctx && videoFrame->GetAncillaryData(&vanc) == S_OK) {
+                struct vanc_cb_ctx cb_ctx = {
+                    .demux = demux_,
+                    .stream_time = stream_time,
+                };
+                sys->vanc_ctx->callback_context = &cb_ctx;
+
                 for (int i = 1; i < 21; i++) {
                     uint32_t *buf;
                     if (vanc->GetBufferForVerticalBlankingLine(i, (void**)&buf) != S_OK)
-                        break;
-                    uint16_t dec[width * 2];
-                    v210_convert(&dec[0], buf, width, 1);
-                    block_t *cc = vanc_to_cc(demux_, dec, width * 2);
-                    if (!cc)
                         continue;
 
-                    cc->i_pts = cc->i_dts = VLC_TS_0 + stream_time;
-
-                    for (int j = 0; j < 4; j++)
-                    {
-                        if (!sys->cc_es[j] && cdp_has_608(cc->p_buffer, cc->i_buffer))
-                        {
-                            es_format_t fmt;
-                            char buf[32];
-                            es_format_Init( &fmt, SPU_ES, VLC_CODEC_CEA608 );
-                            fmt.subs.cc.i_channel = j;
-                            snprintf(buf, sizeof(buf), "Closed captions %d", j + 1);
-                            fmt.psz_description = strdup(buf);
-                            if (fmt.psz_description) {
-                                sys->cc_es[j] = es_out_Add(demux_->out, &fmt);
-                                msg_Dbg(demux_, "Adding Closed captions stream %d", j);
-                            }
-                        }
-                        if (sys->cc_es[j])
-                            es_out_Send(demux_->out, sys->cc_es[j], block_Duplicate(cc));
+                    if (width == 720) {
+                        /* Standard definition video will have VANC spanning both
+                           Luma and Chroma channels */
+                        klvanc_v210_line_to_uyvy_c(buf, decoded_words, width);
+                    } else {
+                        if (klvanc_v210_line_to_nv20_c(buf, decoded_words,
+                                                       sizeof(decoded_words),
+                                                       (width / 6) * 6) < 0)
+                            continue;
                     }
-                    for (int j = 0; j < 6; j++)
-                    {
-                        if (!sys->cc708_es[j] && cdp_has_708(cc->p_buffer, cc->i_buffer))
-                        {
-                            es_format_t fmt;
-                            char buf[32];
-                            es_format_Init( &fmt, SPU_ES, VLC_CODEC_CEA708 );
-                            fmt.subs.cc.i_channel = j;
-                            snprintf(buf, sizeof(buf), "DTV Closed captions %d", j + 1);
-                            fmt.psz_description = strdup(buf);
-                            if (fmt.psz_description) {
-                                sys->cc708_es[j] = es_out_Add(demux_->out, &fmt);
-                                msg_Dbg(demux_, "Adding DTV Closed captions stream %d", j);
-                            }
-                        }
-                        if (sys->cc708_es[j])
-                            es_out_Send(demux_->out, sys->cc708_es[j], block_Duplicate(cc));
+                    int ret = klvanc_packet_parse(sys->vanc_ctx, i, decoded_words,
+                                                  sizeof(decoded_words) / (sizeof(uint16_t)));
+                    if (ret < 0) {
+                        continue;
                     }
-                    block_Release(cc);
-
-                    break; // we found the line with Closed Caption data
                 }
                 vanc->Release();
             }
+#endif
         } else if (sys->video_fmt.i_codec == VLC_CODEC_UYVY) {
             for (int y = 0; y < height; ++y) {
                 const uint8_t *src = (const uint8_t *)frame_bytes + stride * y;
@@ -722,6 +803,16 @@ static int Open(vlc_object_t *p_this)
             goto finish;
         }
     }
+
+#ifdef HAVE_KLVANC
+    if (klvanc_context_create(&sys->vanc_ctx) < 0) {
+        msg_Err(demux, "Cannot create VANC library context\n");
+        goto finish;
+    } else {
+        sys->vanc_ctx->verbose = 0;
+        sys->vanc_ctx->callbacks = &callbacks;
+    }
+#endif
 
     sys->delegate = new DeckLinkCaptureDelegate(demux);
     sys->input->SetCallback(sys->delegate);
