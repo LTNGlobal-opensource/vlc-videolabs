@@ -1003,13 +1003,13 @@ static void CEA708SpuConvert( const cea708_window_t *p_w,
     if( p_w->b_relative )
     {
         p_region->origin.x = p_w->i_anchor_offset_h / 100.0;
-        p_region->origin.y = p_w->i_anchor_offset_v / 100.0;
+        p_region->origin.y = 1.0 - (p_w->i_anchor_offset_v / 100.0);
     }
     else
     {
         p_region->origin.x = (float)p_w->i_anchor_offset_h / CEA708_SCREEN_COLS_169;
-        p_region->origin.y = (float)p_w->i_anchor_offset_v /
-                             (CEA708_SCREEN_ROWS * CEA708_FONT_TO_LINE_HEIGHT_RATIO);
+        p_region->origin.y = 1.0 - ((float)p_w->i_anchor_offset_v /
+                                    (CEA708_SCREEN_ROWS * CEA708_FONT_TO_LINE_HEIGHT_RATIO));
     }
     p_region->flags |= UPDT_REGION_ORIGIN_X_IS_RATIO|UPDT_REGION_ORIGIN_Y_IS_RATIO;
 
