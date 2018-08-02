@@ -1492,6 +1492,12 @@ static void DecoderProcess( decoder_t *p_dec, block_t *p_block )
                 p_packetized_block = p_next;
             }
         }
+
+        /* We need to check for CC one last time, in case the packetizer
+           didn't return a block but still extracted CC.  */
+        if( p_packetizer->pf_get_cc )
+            PacketizerGetCc( p_dec, p_packetizer );
+
         /* Drain the decoder after the packetizer is drained */
         if( !pp_block )
             DecoderDecode( p_dec, NULL );
