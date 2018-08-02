@@ -31,6 +31,8 @@ void v210_convert(uint16_t *dst, const uint32_t *bytes, const int width, const i
 
 block_t *vanc_to_cc(vlc_object_t *, uint16_t *, size_t);
 #define vanc_to_cc(obj, buf, words) vanc_to_cc(VLC_OBJECT(obj), buf, words)
+int cdp_has_608(uint8_t *ptr, int size);
+int cdp_has_708(uint8_t *ptr, int size);
 
 #ifdef __cplusplus
 }

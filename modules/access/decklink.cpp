@@ -349,11 +349,12 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
                     block_t *cc = vanc_to_cc(demux_, dec, width * 2);
                     if (!cc)
                         continue;
+
                     cc->i_pts = cc->i_dts = VLC_TS_0 + stream_time;
 
                     for (int j = 0; j < 4; j++)
                     {
-                        if (!sys->cc_es[j])
+                        if (!sys->cc_es[j] && cdp_has_608(cc->p_buffer, cc->i_buffer))
                         {
                             es_format_t fmt;
                             char buf[32];

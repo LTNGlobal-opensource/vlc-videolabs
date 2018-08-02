@@ -200,3 +200,30 @@ block_t *vanc_to_cc(vlc_object_t *obj, uint16_t *buf, size_t words)
 
     return cc;
 }
+
+int cdp_has_608(uint8_t *ptr, int isize)
+{
+    int i;
+
+    for (i = 0; i < isize; i++) {
+        if ((ptr[i] & 0x03) == 0x01 ||
+            (ptr[i] & 0x03) == 0x02)
+            return true;
+        i += 3;
+    }
+
+    return 0;
+}
+
+int cdp_has_708(uint8_t *ptr, int isize)
+{
+    int i;
+
+    for (i = 0; i < isize; i++) {
+        if ((ptr[i] & 0x03) == 0x03)
+            return 1;
+        i += 3;
+    }
+
+    return 0;
+}
