@@ -284,18 +284,6 @@ int main( int i_argc, char *ppsz_argv[] ) {
     }
     printf( " done\n" );
 
-    printf( "Queueing shared memory for destruction, RGBA..." );
-    if( shmctl( i_shmRGBA, IPC_RMID, 0 ) == -1 ) {
-        printf( " failed\n" );
-        exit( -1 );
-    }
-    printf( " done. Text..." );
-    if( shmctl( i_shmText, IPC_RMID, 0 ) == -1 ) {
-        printf( " failed\n" );
-        exit( -1 );
-    }
-    printf( " done\n" );
-
     printf( "Generating data..." );
     DataCreate();
     printf( " done\n" );
@@ -348,4 +336,16 @@ int main( int i_argc, char *ppsz_argv[] ) {
 
     DeleteImage( p_cmd, p_res, i_overlay_image );
     DeleteImage( p_cmd, p_res, i_overlay_text );
+
+    printf( "Queueing shared memory for destruction, RGBA..." );
+    if( shmctl( i_shmRGBA, IPC_RMID, 0 ) == -1 ) {
+        printf( " failed\n" );
+        exit( -1 );
+    }
+    printf( " done. Text..." );
+    if( shmctl( i_shmText, IPC_RMID, 0 ) == -1 ) {
+        printf( " failed\n" );
+        exit( -1 );
+    }
+    printf( " done\n" );
 }
