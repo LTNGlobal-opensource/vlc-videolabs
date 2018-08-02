@@ -86,7 +86,7 @@ static inline void cc_AppendData( cc_data_t *c, uint8_t cc_preamble, const uint8
     if( i_field == 0 || i_field == 1 )
         c->i_608channels |= (3 << (2 * i_field));
     else
-        c->i_708channels |= 1;
+        c->i_708channels |= 0x3f;
 
     c->p_data[c->i_data++] = cc_preamble;
     c->p_data[c->i_data++] = cc[0];
