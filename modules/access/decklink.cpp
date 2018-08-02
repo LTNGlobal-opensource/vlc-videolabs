@@ -128,6 +128,18 @@ vlc_module_end ()
 
 static int Control(demux_t *, int, va_list);
 
+void write_status(int card, int line, const char *msg)
+{
+    char filename[128];
+    snprintf(filename, sizeof(filename), "/tmp/vlc_%d_line%d.txt", card, line);
+    FILE *file = fopen(filename, "w");
+    if (file) {
+        if (msg)
+            fwrite(msg, strlen(msg), 1, file);
+        fclose(file);
+    }
+}
+
 class DeckLinkCaptureDelegate;
 
 struct demux_sys_t
@@ -163,6 +175,15 @@ struct demux_sys_t
 #endif
 
     bool tenbits;
+
+    /* Misc stuff just used for stats */
+#define STATUS_LEN 64
+    int card_index;
+    const char *field_dominance;
+    char mode_status[STATUS_LEN];
+    char cc_status[STATUS_LEN];
+    char afd_status[STATUS_LEN];
+    char scte104_status[STATUS_LEN];
 };
 
 static const char *GetFieldDominance(BMDFieldDominance dom, uint32_t *flags)
@@ -190,7 +211,7 @@ static es_format_t GetModeSettings(demux_t *demux, IDeckLinkDisplayMode *m,
 {
     demux_sys_t *sys = demux->p_sys;
     uint32_t flags = 0;
-    (void)GetFieldDominance(m->GetFieldDominance(), &flags);
+    sys->field_dominance = GetFieldDominance(m->GetFieldDominance(), &flags);
 
     BMDTimeValue frame_duration, time_scale;
     if (m->GetFrameRate(&frame_duration, &time_scale) != S_OK) {
@@ -310,17 +331,47 @@ static int cb_EIA_708B(void *callback_context, struct klvanc_context_s *ctx,
         if (p_sys->cc708_es[j])
             es_out_Send(demux->out, p_sys->cc708_es[j], block_Duplicate(cc));
     }
+
+    snprintf(p_sys->cc_status, STATUS_LEN, "CC (line %d): CEA-608: %s, CEA-708: %s",
+             pkt->hdr.lineNr,
+             cdp_has_608(cc->p_buffer, cc->i_buffer) ? "present" : "none",
+             cdp_has_708(cc->p_buffer, cc->i_buffer) ? "present" : "none");
+
     block_Release(cc);
+
+    return 0;
+}
+
+static int cb_AFD(void *callback_context, struct klvanc_context_s *ctx,
+                  struct klvanc_packet_afd_s *pkt)
+{
+    struct vanc_cb_ctx *cb_ctx = (struct vanc_cb_ctx *)callback_context;
+    demux_t     *demux = cb_ctx->demux;
+    demux_sys_t *p_sys = (demux_sys_t *)demux->p_sys;
+
+    snprintf(p_sys->afd_status, STATUS_LEN, "AFD (line %d): 0x%02x", pkt->hdr.lineNr, pkt->afd);
+
+    return 0;
+}
+
+static int cb_SCTE_104(void *callback_context, struct klvanc_context_s *ctx,
+                       struct klvanc_packet_scte_104_s *pkt)
+{
+    struct vanc_cb_ctx *cb_ctx = (struct vanc_cb_ctx *)callback_context;
+    demux_t     *demux = cb_ctx->demux;
+    demux_sys_t *p_sys = (demux_sys_t *)demux->p_sys;
+
+    snprintf(p_sys->scte104_status, STATUS_LEN, "SCTE-104 (line %d): present", pkt->hdr.lineNr);
 
     return 0;
 }
 
 static struct klvanc_callbacks_s callbacks =
 {
-    NULL,
+    cb_AFD,
     cb_EIA_708B,
     NULL,
-    NULL,
+    cb_SCTE_104,
     NULL,
     NULL,
 };
@@ -417,6 +468,12 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
         const int width = videoFrame->GetWidth();
         const int height = videoFrame->GetHeight();
         const int stride = videoFrame->GetRowBytes();
+
+        snprintf(sys->mode_status, STATUS_LEN, "Mode: %dx%d%s", width, height,
+                 sys->field_dominance);
+        snprintf(sys->cc_status, STATUS_LEN, "CC: None");
+        snprintf(sys->afd_status, STATUS_LEN, "AFD: None");
+        snprintf(sys->scte104_status, STATUS_LEN, "SCTE-104: None");
 
         int bpp = 0;
         switch (sys->video_fmt.i_codec) {
@@ -532,6 +589,11 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
         }
     }
 
+    write_status(sys->card_index, 1, sys->mode_status);
+    write_status(sys->card_index, 2, sys->cc_status);
+    write_status(sys->card_index, 3, sys->afd_status);
+    write_status(sys->card_index, 4, sys->scte104_status);
+
     return S_OK;
 }
 
@@ -640,6 +702,7 @@ static int Open(vlc_object_t *p_this)
         msg_Err(demux, "Invalid card index %d", card_index);
         goto finish;
     }
+    sys->card_index = card_index;
 
     for (int i = 0; i <= card_index; i++) {
         if (sys->card)
@@ -858,6 +921,18 @@ finish:
 
     if (ret != VLC_SUCCESS)
         Close(p_this);
+
+    /* Set some initial values (to prevent stuff from some previous run
+       of the application from showing up... */
+    snprintf(sys->mode_status, STATUS_LEN, "Mode: Unknown");
+    snprintf(sys->cc_status, STATUS_LEN, "CC: None");
+    snprintf(sys->afd_status, STATUS_LEN, "AFD: None");
+    snprintf(sys->scte104_status, STATUS_LEN, "SCTE-104: None");
+
+    write_status(sys->card_index, 1, sys->mode_status);
+    write_status(sys->card_index, 2, sys->cc_status);
+    write_status(sys->card_index, 3, sys->afd_status);
+    write_status(sys->card_index, 4, sys->scte104_status);
 
     return ret;
 }
