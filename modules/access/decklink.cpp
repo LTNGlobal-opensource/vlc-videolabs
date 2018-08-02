@@ -140,7 +140,7 @@ struct demux_sys_t
     es_out_id_t *video_es;
     es_format_t video_fmt;
     es_out_id_t *audio_es;
-    es_out_id_t *cc_es;
+    es_out_id_t *cc_es[4];
 
     vlc_mutex_t pts_lock;
     int last_pts;  /* protected by <pts_lock> */
@@ -349,20 +349,26 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
                         continue;
                     cc->i_pts = cc->i_dts = VLC_TS_0 + stream_time;
 
-                    if (!sys->cc_es) {
-                        es_format_t fmt;
-
-                        es_format_Init( &fmt, SPU_ES, VLC_CODEC_CEA608 );
-                        fmt.psz_description = strdup(N_("Closed captions 1"));
-                        if (fmt.psz_description) {
-                            sys->cc_es = es_out_Add(demux_->out, &fmt);
-                            msg_Dbg(demux_, "Adding Closed captions stream");
+                    for (int j = 0; j < 4; j++)
+                    {
+                        if (!sys->cc_es[j])
+                        {
+                            es_format_t fmt;
+                            char buf[32];
+                            es_format_Init( &fmt, SPU_ES, VLC_CODEC_CEA608 );
+                            fmt.subs.cc.i_channel = j;
+                            snprintf(buf, sizeof(buf), "Closed captions %d", j + 1);
+                            fmt.psz_description = strdup(buf);
+                            if (fmt.psz_description) {
+                                sys->cc_es[j] = es_out_Add(demux_->out, &fmt);
+                                msg_Dbg(demux_, "Adding Closed captions stream %d", j);
+                            }
                         }
+                        if (sys->cc_es[j])
+                            es_out_Send(demux_->out, sys->cc_es[j], block_Duplicate(cc));
                     }
-                    if (sys->cc_es)
-                        es_out_Send(demux_->out, sys->cc_es, cc);
-                    else
-                        block_Release(cc);
+                    block_Release(cc);
+
                     break; // we found the line with Closed Caption data
                 }
                 vanc->Release();
