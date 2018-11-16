@@ -511,6 +511,7 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
 
                 for (int i = 1; i < 21; i++) {
                     uint32_t *buf;
+                    memset(decoded_words, 0, sizeof(decoded_words));
                     if (vanc->GetBufferForVerticalBlankingLine(i, (void**)&buf) != S_OK)
                         continue;
 
