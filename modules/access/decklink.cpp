@@ -181,6 +181,7 @@ struct demux_sys_t
 #define STATUS_LEN 64
     int card_index;
     const char *field_dominance;
+    BMDTimeValue frame_duration, time_scale;
     char mode_status[STATUS_LEN];
     char cc_status[STATUS_LEN];
     char afd_status[STATUS_LEN];
@@ -218,10 +219,9 @@ static es_format_t GetModeSettings(demux_t *demux, IDeckLinkDisplayMode *m,
     uint32_t flags = 0;
     sys->field_dominance = GetFieldDominance(m->GetFieldDominance(), &flags);
 
-    BMDTimeValue frame_duration, time_scale;
-    if (m->GetFrameRate(&frame_duration, &time_scale) != S_OK) {
-        time_scale = 0;
-        frame_duration = 1;
+    if (m->GetFrameRate(&sys->frame_duration, &sys->time_scale) != S_OK) {
+        sys->time_scale = 0;
+        sys->frame_duration = 1;
     }
 
     es_format_t video_fmt;
@@ -244,8 +244,8 @@ static es_format_t GetModeSettings(demux_t *demux, IDeckLinkDisplayMode *m,
     video_fmt.video.i_height = m->GetHeight();
     video_fmt.video.i_sar_num = 1;
     video_fmt.video.i_sar_den = 1;
-    video_fmt.video.i_frame_rate = time_scale;
-    video_fmt.video.i_frame_rate_base = frame_duration;
+    video_fmt.video.i_frame_rate = sys->time_scale;
+    video_fmt.video.i_frame_rate_base = sys->frame_duration;
     video_fmt.i_bitrate = video_fmt.video.i_width * video_fmt.video.i_height * video_fmt.video.i_frame_rate * 2 * 8;
 
     unsigned aspect_num, aspect_den;
@@ -477,8 +477,8 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
         const int height = videoFrame->GetHeight();
         const int stride = videoFrame->GetRowBytes();
 
-        snprintf(sys->mode_status, STATUS_LEN, "Mode: %dx%d%s", width, height,
-                 sys->field_dominance);
+        snprintf(sys->mode_status, STATUS_LEN, "Mode: %dx%d%s (%d/%d)", width, height,
+                 sys->field_dominance, sys->time_scale, sys->frame_duration);
         snprintf(sys->cc_status, STATUS_LEN, "CC: None");
         snprintf(sys->afd_status, STATUS_LEN, "AFD: None");
         snprintf(sys->fc_status, STATUS_LEN, "Framecounter Errors: %d", sys->frame_counter_errors);
