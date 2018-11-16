@@ -184,6 +184,7 @@ struct demux_sys_t
     char cc_status[STATUS_LEN];
     char afd_status[STATUS_LEN];
     char scte104_status[STATUS_LEN];
+    time_t scte104_lastupdate;
 };
 
 static const char *GetFieldDominance(BMDFieldDominance dom, uint32_t *flags)
@@ -361,7 +362,10 @@ static int cb_SCTE_104(void *callback_context, struct klvanc_context_s *ctx,
     demux_t     *demux = cb_ctx->demux;
     demux_sys_t *p_sys = (demux_sys_t *)demux->p_sys;
 
-    snprintf(p_sys->scte104_status, STATUS_LEN, "SCTE-104 (line %d): present", pkt->hdr.lineNr);
+    snprintf(p_sys->scte104_status, STATUS_LEN,
+	     "SCTE-104 (line %d): present (Op=%x, numOps=%d)",
+	     pkt->hdr.lineNr, pkt->so_msg.opID, pkt->mo_msg.num_ops);
+    time(&p_sys->scte104_lastupdate);
 
     return 0;
 }
@@ -473,7 +477,11 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
                  sys->field_dominance);
         snprintf(sys->cc_status, STATUS_LEN, "CC: None");
         snprintf(sys->afd_status, STATUS_LEN, "AFD: None");
-        snprintf(sys->scte104_status, STATUS_LEN, "SCTE-104: None");
+
+        time_t curtime;
+        time(&curtime);
+        if (curtime > (sys->scte104_lastupdate + 5))
+            snprintf(sys->scte104_status, STATUS_LEN, "SCTE-104: None");
 
         int bpp = 0;
         switch (sys->video_fmt.i_codec) {
