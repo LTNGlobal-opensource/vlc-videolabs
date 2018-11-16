@@ -41,6 +41,7 @@
 #endif
 
 #include "sdi.h"
+#include "klburnin.h"
 
 static int  Open (vlc_object_t *);
 static void Close(vlc_object_t *);
@@ -184,7 +185,10 @@ struct demux_sys_t
     char cc_status[STATUS_LEN];
     char afd_status[STATUS_LEN];
     char scte104_status[STATUS_LEN];
+    char fc_status[STATUS_LEN];
     time_t scte104_lastupdate;
+    uint32_t frame_counter;
+    uint32_t frame_counter_errors;
 };
 
 static const char *GetFieldDominance(BMDFieldDominance dom, uint32_t *flags)
@@ -477,6 +481,7 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
                  sys->field_dominance);
         snprintf(sys->cc_status, STATUS_LEN, "CC: None");
         snprintf(sys->afd_status, STATUS_LEN, "AFD: None");
+        snprintf(sys->fc_status, STATUS_LEN, "Framecounter Errors: %d", sys->frame_counter_errors);
 
         time_t curtime;
         time(&curtime);
@@ -507,6 +512,19 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
 
         if (sys->video_fmt.i_codec == VLC_CODEC_I422_10L) {
             v210_convert((uint16_t*)video_frame->p_buffer, frame_bytes, width, height);
+
+            uint32_t val = klburnin_V210_read_32bit_value((void *) frame_bytes, stride, 0);
+            if (val != 0 && sys->frame_counter + 1 != val) {
+                char t[160];
+                time_t now = time(0);
+                sprintf(t, "%s", ctime(&now));
+                t[strlen(t) - 1] = 0;
+                msg_Warn(demux_, "%s: KL OSD counter discontinuity, expected %08" PRIx32 " got %08" PRIx32 "\n",
+                         t, sys->frame_counter + 1, val);
+                sys->frame_counter_errors++;
+            }
+            sys->frame_counter = val;
+
 #ifdef HAVE_KLVANC
             IDeckLinkVideoFrameAncillary *vanc;
             uint16_t decoded_words[16384];
@@ -602,6 +620,7 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
     write_status(sys->card_index, 2, sys->cc_status);
     write_status(sys->card_index, 3, sys->afd_status);
     write_status(sys->card_index, 4, sys->scte104_status);
+    write_status(sys->card_index, 5, sys->fc_status);
 
     return S_OK;
 }
@@ -937,6 +956,7 @@ finish:
     snprintf(sys->cc_status, STATUS_LEN, "CC: None");
     snprintf(sys->afd_status, STATUS_LEN, "AFD: None");
     snprintf(sys->scte104_status, STATUS_LEN, "SCTE-104: None");
+    snprintf(sys->fc_status, STATUS_LEN, "Framecounter Errors: %d", sys->frame_counter_errors);
 
     write_status(sys->card_index, 1, sys->mode_status);
     write_status(sys->card_index, 2, sys->cc_status);
